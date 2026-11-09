@@ -93,23 +93,88 @@ db.assets.find(a=>a.id==='M002').name='二次元拍立得边框';db.assets.find(
 db.resources[0]={...db.resources[0],style:'活动卡片',action:'链接跳转',member:'SVIP',eligibility:'目标模块有可领取物料',qualModule:'铁盒里的珍藏',position:'守护页 · 顶部运营区'};
 
 
+let overlayTier='VIP';
+const overlaySettings={VIP:[],SVIP:[]};
+function overlayColumns(){
+ const options=[['dress','该等级新增权益']];
+ if(overlayTier==='SVIP'){
+  options[0][1]='外显装扮';
+  options.push(['box','铁盒造型'],['quota','铁盒名额']);
+  db.types.filter(t=>['item','decor'].includes(t.category)&&Object.values(db.growth).some(g=>g.type===t.id&&g.status==='已发布')).forEach(t=>options.push([t.id,t.name]));
+ }
+ const saved=overlaySettings[overlayTier].filter(c=>options.some(([id])=>id===c.id));
+ return [...saved,...options.filter(([id])=>!saved.some(c=>c.id===id)).map(([id,label])=>({id,label,show:true}))];
+}
+function overlayValue(id,days){
+ if(id==='dress')return dressGrowth.filter(g=>g.days===days&&g.status==='已发布'&&(overlayTier==='SVIP'||g.member!=='SVIP')).flatMap(g=>dressLookup(g.dressIds).map(d=>d.name)).join('、')||'—';
+ if(id==='quota'){
+  const limit=numericGrowth.filter(g=>g.status==='已发布'&&g.days<=days).sort((a,b)=>b.days-a.days)[0];
+  return limit?'共 '+limit.value+' 个':'—';
+ }
+ const rows=Object.values(db.growth).filter(g=>g.status==='已发布'&&rule(g.rule).days===days);
+ if(id==='box')return rows.filter(g=>type(g.type).category==='box').flatMap(g=>g.assets.map(key=>db.assets.find(a=>a.id===key)?.name||key)).join('、')||'—';
+ return rows.some(g=>g.type===id)?(type(id).category==='item'?'开放制作':'开放使用'):'—';
+}
+function renderOverlay(){
+ const columns=overlayColumns().filter(c=>c.show);
+ const names=['入坑','心动','偏爱','本命','挚爱','铁粉'];
+ $('#growthContent').innerHTML=`<div class="toolbar">${['VIP','SVIP'].map(t=>`<button data-tier="${t}" class="${t===overlayTier?'primary':''}">${t}</button>`).join('')}<button class="right" id="editColumns">配置展示列</button></div><div style="background:#f5f5fa;padding:24px"><div style="background:white;max-width:480px;margin:auto;border-radius:18px;padding:18px"><div style="width:36px;height:4px;background:#ccc;margin:0 auto 18px;border-radius:4px"></div><h2>${overlayTier} 守护等级权益</h2><p class="subtle">预览示例 · 已守护 258 天 · 当前「挚爱」</p><div style="overflow:auto"><table style="width:max-content;min-width:100%"><thead><tr><th>守护等级</th>${columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')}</tr></thead><tbody>${stages.map((s,i)=>`<tr style="${s.days===199?'background:#eeeeff':''}"><td>${s.days===1?'开启':s.days+'天'}<div class="mini">${names[i]}${s.days===199?' · 当前':''}</div></td>${columns.map(c=>'<td style="max-width:250px">'+esc(overlayValue(c.id,s.days))+'</td>').join('')}</tr>`).join('')}</tbody></table></div></div></div>`;
+ document.querySelectorAll('[data-tier]').forEach(b=>b.onclick=()=>{overlayTier=b.dataset.tier;renderOverlay()});
+ $('#editColumns').onclick=editOverlayColumns;
+}
+function editOverlayColumns(){
+ const draft=overlayColumns().map(c=>({...c}));
+ function draw(){
+ $('#modal').innerHTML=`<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>${overlayTier} 浮层展示列</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><p class="hint">勾选展示列，可修改列名并调整顺序。各节点内容取已发布的成长权益。</p>${draft.map((c,i)=>`<div class="toolbar" data-col="${i}"><input type="checkbox" aria-label="展示" style="width:auto" ${c.show?'checked':''}><input type="text" aria-label="展示列名" value="${esc(c.label)}"><button data-move="-1" ${i===0?'disabled':''}>上移</button><button data-move="1" ${i===draft.length-1?'disabled':''}>下移</button></div>`).join('')}</div><div class="drawer-foot"><button onclick="closeModal()">取消</button><button class="primary" id="saveCols">保存展示配置</button></div></div></div>`;
+ document.querySelectorAll('[data-col]').forEach((r,i)=>{
+  r.querySelector('[type=checkbox]').onchange=e=>draft[i].show=e.target.checked;
+  r.querySelector('[type=text]').oninput=e=>draft[i].label=e.target.value;
+  r.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const j=i+Number(b.dataset.move);[draft[i],draft[j]]=[draft[j],draft[i]];draw()});
+ });
+ $('#saveCols').onclick=()=>{if(!draft.some(c=>c.show)||draft.some(c=>!c.label.trim())){toast('请填写列名并至少展示一列');return}overlaySettings[overlayTier]=draft;closeModal();renderOverlay();toast('已保存（本次会话）')};
+ }
+ draw();
+}
+
+let growthView='后台数据';
 function renderGrowth(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='growth'));
- const edit=(id,name)=>'<button class="link" onclick="growthEditor(\''+esc(id)+'\')">'+esc(name)+'</button>';
+ const editing=growthView==='后台数据', showTin=growthView!=='VIP 视角';
+ const visible=g=>editing||g.status==='已发布';
+ const entry=(id,name)=>editing?`<button class="link" data-growth-id="${esc(id)}">${esc(name)}</button>`:esc(name);
+ const exclusiveDress=dressGrowth.some(g=>visible(g)&&g.member==='SVIP');
+ const tinHeaders=['铁盒外形','铁盒背景','铁盒名额','DIY 物料','铁盒装饰品'];
+ if(exclusiveDress)tinHeaders.push('专属装扮');
+ if(editing)tinHeaders.push('实物制作');
  const cells=stages.map(n=>{
- const mats=Object.values(db.growth).filter(g=>rule(g.rule).days===n.days);
- const category=k=>mats.filter(g=>type(g.type).category===k).map(g=>edit(k==='box'?g.type+'@'+n.days:g.type,k==='box'?g.assets.map(id=>db.assets.find(a=>a.id===id)?.name||id).join('、'):type(g.type).name)).join('<br>')||'—';
- const dresses=dressGrowth.filter(g=>g.days===n.days).map(g=>'<div>'+edit(g.id,g.name)+'<br><span class="mini">'+esc(g.member)+' · '+esc(g.dressIds.join('、'))+'</span></div>').join('');
- const limit=numericGrowth.find(g=>g.days===n.days);
- return '<tr><td><b>'+n.label+'</b></td><td>'+dresses+'</td><td>'+category('box')+'</td><td>'+category('item')+'</td><td>'+category('decor')+'</td><td>'+(limit?edit(limit.id,limit.value+' 个'):'—')+'</td><td><button disabled>关闭</button></td><td><button class="link" onclick="growthEditor(null,'+n.days+')">配置此节点</button></td></tr>';
+  const mats=Object.values(db.growth).filter(g=>visible(g)&&rule(g.rule).days===n.days);
+  const materialColumn=key=>mats.filter(g=>{
+   const t=type(g.type);
+   return (t.id==='T003'||t.template==='容器背景'||t.name==='铁盒背景自定义'?'background':t.category)===key;
+  }).map(g=>entry(key==='box'?g.type+'@'+n.days:g.type,key==='box'?g.assets.map(id=>db.assets.find(a=>a.id===id)?.name||id).join('、'):type(g.type).name)).join('<br>')||'—';
+  const dresses=exclusive=>dressGrowth.filter(g=>visible(g)&&g.days===n.days&&(g.member==='SVIP')===exclusive).map(g=>entry(g.id,g.name)+(editing?'<br><span class="mini">'+esc(g.dressIds.join('、'))+'</span>':'')).join('<br>')||'—';
+  const row=[esc(n.label),dresses(false)];
+  if(showTin){
+   const quota=numericGrowth.find(g=>visible(g)&&g.days===n.days);
+   row.push(materialColumn('box'),materialColumn('background'),quota?entry(quota.id,'共 '+quota.value+' 个'):'—',materialColumn('item'),materialColumn('decor'));
+   if(exclusiveDress)row.push(dresses(true));
+   if(editing)row.push('一期关闭');
+  }
+  if(editing)row.push(`<button class="link" data-growth-day="${n.days}">配置此节点</button>`);
+  return '<tr>'+row.map(v=>'<td>'+v+'</td>').join('')+'</tr>';
  }).join('');
- $('#main').innerHTML='<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><div><h1>成长权益配置</h1><p class="desc">按守护天数配置外显装扮与 SVIP 铁盒权益。点击表内权益可编辑。</p></div><button class="primary right" onclick="growthEditor()">＋ 配置成长权益</button></div><div class="notice">外显装扮引用素材 ID。物料和装饰按所属类型的资产使用方式开放。铁盒名额按节点总上限计算。</div><div class="panel" style="overflow:auto"><table><thead><tr>'+['守护节点','外显装扮 · VIP / SVIP','铁盒外型','盒内物料','装饰品','铁盒名额','实物制作','操作'].map(v=>'<th>'+v+'</th>').join('')+'</tr></thead><tbody>'+cells+'</tbody></table><div class="footer">铁盒相关权益仅限 SVIP。实物制作一期关闭，装扮素材 ID 为演示数据。</div></div>';
+ const views=['后台数据','前端浮层展示'].map(v=>`<button class="${v===growthView?'active':''}" aria-pressed="${v===growthView}" data-growth-view="${v}">${v}</button>`).join('');
+ $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1>${editing?'<button class="primary right" onclick="growthEditor()">＋ 配置成长权益</button>':''}</div><div class="panel" style="overflow:auto"><div class="tabs">${views}</div><div id="growthContent"><table><thead><tr><th rowspan="2">守护节点</th><th>VIP / SVIP 共同权益</th>${showTin?'<th colspan="'+tinHeaders.length+'">SVIP 专属权益</th>':''}${editing?'<th rowspan="2">操作</th>':''}</tr><tr><th>外显装扮</th>${showTin?tinHeaders.map(h=>'<th>'+h+'</th>').join(''):''}</tr></thead><tbody>${cells}</tbody></table></div></div>`;
+ document.querySelectorAll('[data-growth-view]').forEach(b=>b.onclick=()=>{growthView=b.dataset.growthView;renderGrowth()});
+ if(!editing){renderOverlay();return}
+ document.querySelectorAll('[data-growth-id]').forEach(b=>b.onclick=()=>growthEditor(b.dataset.growthId));
+ document.querySelectorAll('[data-growth-day]').forEach(b=>b.onclick=()=>chooseGrowth(Number(b.dataset.growthDay)));
 }
 function chooseGrowth(days){
  const opts=db.types.filter(t=>t.status==='已上架').map(t=>[t.id,categories[t.category][0]+' · '+t.name]);
- $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>配置成长权益</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body">'+field('成长节点',select('chooseDay',stages.map(n=>[String(n.days),n.label]),String(days)))+field('权益来源',select('chooseSource',[['dress','外显装扮 · 引用素材 ID'],...opts,['physical','实物制作 · 一期关闭']]))+'<div class="locked" id="choiceHint"></div></div><div class="drawer-foot"><button class="primary right" id="continueGrowth">继续配置</button></div></div></div>';
+ $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>配置成长权益</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body">'+field('成长节点',select('chooseDay',stages.map(n=>[String(n.days),n.label]),String(days)))+field('权益来源',('<select id="chooseSource"><optgroup label="VIP / SVIP 共同权益"><option value="dress">外显装扮 · 引用素材 ID</option></optgroup><optgroup label="SVIP 专属权益">'+opts.map(([id,label])=>'<option value="'+esc(id)+'">'+esc(label)+'</option>').join('')+'<option value="physical" disabled>实物制作 · 一期关闭</option></optgroup></select>'))+'<div class="locked" id="choiceHint"></div></div><div class="drawer-foot"><button class="primary right" id="continueGrowth">继续配置</button></div></div></div>';
  const target=$('#chooseSource'),go=$('#continueGrowth');
- const refresh=()=>{const key=target.value;go.disabled=key==='physical';$('#choiceHint').textContent=key==='dress'?'引用已有装扮素材并核对会员门槛。':key==='physical'?'二期预研，一期各节点均关闭。':usage(type(key))+(db.growth[key]?' · 此类型已设置首次解锁节点，继续可编辑原配置。':'');};
+ const refresh=()=>{const key=target.value;go.disabled=key==='physical';$('#choiceHint').textContent=key==='dress'?'装扮 ID 自动带入会员范围，以所选装扮的最高门槛为准。':key==='physical'?'二期预研，一期各节点均关闭。':'会员范围：仅 SVIP · '+usage(type(key))+(db.growth[key]?' · 此类型已设置首次解锁节点，继续可编辑原配置。':'');};
  target.onchange=refresh;refresh();go.onclick=()=>{const day=Number($('#chooseDay').value);closeModal();if(target.value==='dress')dressEditor('growth',null,day);else growthEditor(target.value,day)};
 }
 function growthEditor(typeId,days=1){if(typeId?.includes('@')){const parts=typeId.split('@');typeId=parts[0];days=Number(parts[1])}if(!typeId){chooseGrowth(days);return}if(numericGrowth.some(g=>g.id===typeId)){numericEditor(null,days,typeId);return}if(typeId&&type(typeId).valueKind==='number'){const existing=numericGrowth.find(g=>g.type===typeId&&g.days===days);numericEditor(typeId,days,existing?.id);return}if(dressGrowth.some(x=>x.id===typeId)){dressEditor('growth',typeId,days);return}const existing=db.growth[typeId+'@'+days]||db.growth[typeId];$('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="成长权益配置"><div class="drawer-head"><h2>配置成长权益</h2><button class="link right" onclick="closeModal()">✕</button></div><div class="drawer-body"><div id="growthErrors"></div>${section('01','选择解锁类型',field('权益类型',select('gType',db.types.map(t=>[t.id,t.name]),typeId||db.types[0]?.id),'素材类配置首次解锁节点与基础素材；数值类按各节点配置总上限。类型由运营在权益类型管理中创建。'))}${section('02','会员身份与成长节点','<div id="gIdentity" class="locked" style="margin-bottom:15px"></div>'+field('解锁节点',select('gDay',stages.map(n=>[String(n.days),n.label]),String(existing?rule(existing.rule).days:days)))+'<p class="hint">使用已确认的六档梯度，不支持任意输入天数。会员范围按物料模板固定，DIY 不向 VIP 开放。</p>')}${section('03','配套基础素材','<div id="gAssets"></div><p class="hint" style="margin-top:12px">至少选择一款基础素材，用户达标后自动可用。未选中的素材可通过运营策略投放，仍继承本类型门槛。</p>')}${section('04','成长权益适用范围',scope(existing||{}))}${section('05','物料标展示',markFields(existing||{},true))}<div class="notice">生效路径：命中用户人群与艺人范围 → 类型和素材已上架 → 成长配置发布 → 当前艺人守护天数与会员身份达标 → 基础素材自动可用。</div></div><div class="drawer-foot"><span class="subtle">本地演示，不发布到线上</span><button class="right" onclick="closeModal()">取消</button><button id="gDraft">保存草稿</button><button class="primary" id="gPublish">发布成长权益</button></div></div></div>`;const refresh=()=>{const t=type($('#gType').value),g=db.growth[t.id+'@'+days]||db.growth[t.id];$('#gIdentity').innerHTML=t.template==='外显装扮'?'会员范围：<b>VIP / SVIP</b> · 共同外显权益':'会员范围：<b>仅 SVIP</b> · 铁盒 / DIY 权益';if(g)$('#gDay').value=String(rule(g.rule).days);else $('#gDay').value=String(days);$('#gDay').disabled=g?.status==='已发布';$('#gIdentity').innerHTML+=' · 资产使用方式：'+usage(t);$('#markText').value=g?.markText||'新解锁';bindMark();const assets=db.assets.filter(a=>a.type===t.id&&(t.category!=='box'||!a.rule||rule(a.rule).days===days));$('#gAssets').innerHTML=assets.length?`<div class="checklist">${assets.map(a=>`<label><input type="checkbox" name="baseAsset" value="${a.id}" ${(g?.assets||[]).includes(a.id)?'checked':''}>${esc(a.name)} ${pill(a.status)}</label>`).join('')}</div>`:'<div class="locked">此类型还没有素材，请先到物料管理上传。</div>'};$('#gType').onchange=()=>{if(type($('#gType').value).valueKind==='number'){growthEditor($('#gType').value,Number($('#gDay').value));return}refresh();const g=db.growth[$('#gType').value]||{};$('#aud').value=g.aud||'全部用户';$('#pack').value=g.pack||'二次元兴趣人群';$('#artistMode').value=g.artistMode||'全部艺人';$('#artists').value=g.artists||'';$('#aud').onchange()};$('#aud').onchange=$('#artistMode').onchange=()=>{$('#packWrap').classList.toggle('hidden',$('#aud').value==='全部用户');$('#artistWrap').classList.toggle('hidden',$('#artistMode').value==='全部艺人')};$('#aud').onchange();refresh();if((existing||db.growth[$('#gType').value])?.status==='已发布'&&typeId){$('#gType').disabled=true;$('#gDay').disabled=true;$('#growthErrors').innerHTML='<div class="notice">已发布的类型与节点锁定，可补充基础素材，避免已有用户权益变化。</div>'}$('#gDraft').onclick=()=>saveGrowth(true);$('#gPublish').onclick=()=>saveGrowth(false);addSourceSelector('growth',typeId,days)}
