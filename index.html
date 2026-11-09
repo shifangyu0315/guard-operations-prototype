@@ -102,8 +102,8 @@ function overlayColumns(){
   options.push(['box','铁盒造型'],['quota','铁盒名额']);
   db.types.filter(t=>['item','decor'].includes(t.category)&&Object.values(db.growth).some(g=>g.type===t.id&&g.status==='已发布')).forEach(t=>options.push([t.id,t.name]));
  }
- const saved=overlaySettings[overlayTier].filter(c=>options.some(([id])=>id===c.id));
- return [...saved,...options.filter(([id])=>!saved.some(c=>c.id===id)).map(([id,label])=>({id,label,show:true}))];
+ if(overlaySettings[overlayTier].length)return overlaySettings[overlayTier];
+ return options.map(([id,label])=>({id,label,show:true,values:Object.fromEntries(stages.map(n=>[n.days,overlayValue(id,n.days)]))}));
 }
 function overlayValue(id,days){
  if(id==='dress')return dressGrowth.filter(g=>g.days===days&&g.status==='已发布'&&(overlayTier==='SVIP'||g.member!=='SVIP')).flatMap(g=>dressLookup(g.dressIds).map(d=>d.name)).join('、')||'—';
@@ -118,18 +118,25 @@ function overlayValue(id,days){
 function renderOverlay(){
  const columns=overlayColumns().filter(c=>c.show);
  const names=['入坑','心动','偏爱','本命','挚爱','铁粉'];
- $('#growthContent').innerHTML=`<div class="toolbar">${['VIP','SVIP'].map(t=>`<button data-tier="${t}" class="${t===overlayTier?'primary':''}">${t}</button>`).join('')}<button class="right" id="editColumns">配置展示列</button></div><div style="background:#f5f5fa;padding:24px"><div style="background:white;max-width:480px;margin:auto;border-radius:18px;padding:18px"><div style="width:36px;height:4px;background:#ccc;margin:0 auto 18px;border-radius:4px"></div><h2>${overlayTier} 守护等级权益</h2><p class="subtle">预览示例 · 已守护 258 天 · 当前「挚爱」</p><div style="overflow:auto"><table style="width:max-content;min-width:100%"><thead><tr><th>守护等级</th>${columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')}</tr></thead><tbody>${stages.map((s,i)=>`<tr style="${s.days===199?'background:#eeeeff':''}"><td>${s.days===1?'开启':s.days+'天'}<div class="mini">${names[i]}${s.days===199?' · 当前':''}</div></td>${columns.map(c=>'<td style="max-width:250px">'+esc(overlayValue(c.id,s.days))+'</td>').join('')}</tr>`).join('')}</tbody></table></div></div></div>`;
+ $('#growthContent').innerHTML=`<div class="toolbar">${['VIP','SVIP'].map(t=>`<button data-tier="${t}" class="${t===overlayTier?'primary':''}">${t}</button>`).join('')}<button class="right" id="editColumns">配置浮层内容</button></div><div style="background:#f5f5fa;padding:24px"><div style="background:white;max-width:480px;margin:auto;border-radius:18px;padding:18px"><div style="width:36px;height:4px;background:#ccc;margin:0 auto 18px;border-radius:4px"></div><h2>${overlayTier} 守护等级权益</h2><p class="subtle">预览示例 · 已守护 258 天 · 当前「挚爱」</p><div style="overflow:auto"><table style="width:max-content;min-width:100%"><thead><tr><th>守护等级</th>${columns.map(c=>'<th>'+esc(c.label)+'</th>').join('')}</tr></thead><tbody>${stages.map((s,i)=>`<tr style="${s.days===199?'background:#eeeeff':''}"><td>${s.days===1?'开启':s.days+'天'}<div class="mini">${names[i]}${s.days===199?' · 当前':''}</div></td>${columns.map(c=>'<td style="max-width:250px">'+esc(c.values[s.days]||'—')+'</td>').join('')}</tr>`).join('')}</tbody></table></div></div></div>`;
  document.querySelectorAll('[data-tier]').forEach(b=>b.onclick=()=>{overlayTier=b.dataset.tier;renderOverlay()});
  $('#editColumns').onclick=editOverlayColumns;
 }
 function editOverlayColumns(){
- const draft=overlayColumns().map(c=>({...c}));
+ const draft=overlayColumns().map(c=>({...c,values:{...c.values}}));
+ let active=0;
  function draw(){
- $('#modal').innerHTML=`<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>${overlayTier} 浮层展示列</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><p class="hint">勾选展示列，可修改列名并调整顺序。各节点内容取已发布的成长权益。</p>${draft.map((c,i)=>`<div class="toolbar" data-col="${i}"><input type="checkbox" aria-label="展示" style="width:auto" ${c.show?'checked':''}><input type="text" aria-label="展示列名" value="${esc(c.label)}"><button data-move="-1" ${i===0?'disabled':''}>上移</button><button data-move="1" ${i===draft.length-1?'disabled':''}>下移</button></div>`).join('')}</div><div class="drawer-foot"><button onclick="closeModal()">取消</button><button class="primary" id="saveCols">保存展示配置</button></div></div></div>`;
- document.querySelectorAll('[data-col]').forEach((r,i)=>{
+ const col=draft[active];
+ $('#modal').innerHTML=`<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>${overlayTier} 浮层内容配置</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div class="toolbar"><strong>权益类型</strong><button id="addCol" class="right">＋ 添加权益类型</button></div><div class="tabs" style="overflow:auto">${draft.map((c,i)=>`<button data-pick="${i}" class="${active===i?'active':''}">${esc(c.label||'新类型')}</button>`).join('')}</div>${col?`<div class="toolbar" data-col="${active}"><label><input type="checkbox" style="width:auto" ${col.show?'checked':''}> 展示</label><input type="text" aria-label="权益类型名称" placeholder="权益类型名称" value="${esc(col.label)}"><button data-move="-1" ${active===0?'disabled':''}>前移</button><button data-move="1" ${active===draft.length-1?'disabled':''}>后移</button><button id="removeCol">移除</button></div><table><thead><tr><th>固定守护节点</th><th>浮层展示内容</th></tr></thead><tbody>${stages.map(n=>`<tr><th>${esc(n.label)}</th><td><textarea rows="2" aria-label="${esc(n.label)} 展示内容" data-day="${n.days}" placeholder="本档无新增时可留空">${esc(col.values[n.days]||'')}</textarea></td></tr>`).join('')}</tbody></table>`:''}</div><div class="drawer-foot"><button onclick="closeModal()">取消</button><button class="primary" id="saveCols">保存展示配置</button></div></div></div>`;
+ $('#addCol').onclick=()=>{draft.push({id:crypto.randomUUID(),label:'',show:true,values:{}});active=draft.length-1;draw();$('#modal input[type=text]').focus()};
+ if(col)$('#removeCol').onclick=()=>{draft.splice(active,1);active=Math.max(0,Math.min(active,draft.length-1));draw()};
+ document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{active=Number(b.dataset.pick);draw()});
+ document.querySelectorAll('[data-day]').forEach(e=>e.oninput=()=>col.values[e.dataset.day]=e.value.trim());
+ document.querySelectorAll('[data-col]').forEach(r=>{
+  const i=Number(r.dataset.col);
   r.querySelector('[type=checkbox]').onchange=e=>draft[i].show=e.target.checked;
-  r.querySelector('[type=text]').oninput=e=>draft[i].label=e.target.value;
-  r.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const j=i+Number(b.dataset.move);[draft[i],draft[j]]=[draft[j],draft[i]];draw()});
+  r.querySelector('[type=text]').oninput=e=>{draft[i].label=e.target.value;document.querySelector('[data-pick="'+i+'"]').textContent=e.target.value||'新类型'};
+  r.querySelectorAll('[data-move]').forEach(b=>b.onclick=()=>{const j=i+Number(b.dataset.move);[draft[i],draft[j]]=[draft[j],draft[i]];active=j;draw()});
  });
  $('#saveCols').onclick=()=>{if(!draft.some(c=>c.show)||draft.some(c=>!c.label.trim())){toast('请填写列名并至少展示一列');return}overlaySettings[overlayTier]=draft;closeModal();renderOverlay();toast('已保存（本次会话）')};
  }
