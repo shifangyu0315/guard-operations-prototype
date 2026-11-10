@@ -5,7 +5,7 @@
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stages=[{days:1,label:'开启（D1）'},{days:11,label:'D11'},{days:33,label:'D33'},{days:99,label:'D99'},{days:199,label:'D199'},{days:365,label:'D365'}];
 const rules=stages.flatMap(n=>[{id:'COMMON_D'+n.days,name:n.label+' · 共同外显权益',member:'VIP / SVIP',days:n.days,scope:'common'},{id:'DIY_D'+n.days,name:n.label+' · 铁盒 / DIY 权益',member:'SVIP',days:n.days,scope:'diy'}]);
-let db={types:[{id:'T001',name:'贴纸',template:'平面贴纸',rule:'',status:'草稿'},{id:'T002',name:'拍立得',template:'相片边框',rule:'',status:'草稿'},{id:'T003',name:'铁盒背景',template:'容器背景',rule:'',status:'草稿'}],assets:[{id:'M001',name:'星愿贴纸',type:'T001',status:'草稿'},{id:'M002',name:'夏日手记',type:'T002',status:'草稿'},{id:'M003',name:'夜空收藏',type:'T003',status:'草稿'}],deliveries:[{id:'D001',name:'二次元艺人物料上新',type:'T001',mode:'整个类型',assets:[],aud:'指定人群',pack:'二次元兴趣人群',artistMode:'指定艺人',artists:'10001, 10002, 10003',start:'2026-11-01T00:00',end:'2026-11-30T23:59',status:'草稿'}],resources:[{id:'R001',name:'守护惊喜日 · 本期限量物料',tag:'守护惊喜日 · 本期限定',title:'给喜欢换个新样子',sub:'领取拍立得主题边框',button:'去领取',url:'https://example.com/guard/reward',start:'2026-11-01T00:00',end:'2026-11-07T23:59',priority:10,aud:'全部用户',artistMode:'全部艺人',status:'待生效'}]};
+let db={types:[{id:'T001',name:'贴纸',template:'平面贴纸',rule:'',status:'草稿'},{id:'T002',name:'拍立得',template:'相片边框',rule:'',status:'草稿'}],assets:[{id:'M001',name:'星愿贴纸',type:'T001',status:'草稿'},{id:'M002',name:'夏日手记',type:'T002',status:'草稿'}],deliveries:[{id:'D001',name:'二次元艺人物料上新',type:'T001',mode:'整个类型',assets:[],aud:'指定人群',pack:'二次元兴趣人群',artistMode:'指定艺人',artists:'10001, 10002, 10003',start:'2026-11-01T00:00',end:'2026-11-30T23:59',status:'草稿'}],resources:[{id:'R001',name:'守护惊喜日 · 本期限量物料',tag:'守护惊喜日 · 本期限定',title:'给喜欢换个新样子',sub:'领取拍立得主题边框',button:'去领取',url:'https://example.com/guard/reward',start:'2026-11-01T00:00',end:'2026-11-07T23:59',priority:10,aud:'全部用户',artistMode:'全部艺人',status:'待生效'}]};
 let page='materials',tab='types',query='',editing=null,upload='',uploadName='';
 function rule(id){return rules.find(r=>r.id===id)||{id:'',name:'待关联成长节点',member:'待关联',days:'—',scope:''}}function type(id){return db.types.find(t=>t.id===id)||db.types[0]}function pill(s){return `<span class="badge ${s==='已上架'||s==='生效中'?'green':s==='草稿'||s==='已停用'?'gray':'gold'}">${esc(s)}</span>`}function toast(s){$('#toast').innerHTML=`<div class="toast">${esc(s)}</div>`;setTimeout(()=>$('#toast').innerHTML='',2600)}function closeModal(){$('#modal').innerHTML=''}
 const titles={materials:['权益类型与素材管理','维护权益类型和素材资源，开放方式在成长权益或运营策略中配置。'],delivery:['日常运营权益','选择铁盒物料或引用现有装扮 ID，配置投放范围、排期与权益标。'],resources:['资源位配置','其他运营资源位优先展示；无符合条件的运营资源位时，再展示自动上新轻提示。']};
@@ -52,7 +52,7 @@ function materialTypeTabs(){
  const groupTabs=groups.map(g=>`<button type="button" role="tab" aria-selected="${g.id===selectedAssetGroup}" data-asset-group="${esc(g.id)}" class="${g.id===selectedAssetGroup?'active':''}">${esc(g.name)}</button>`).join('');
  return '<div class="tabs" role="tablist" aria-label="素材类型" style="overflow-x:auto;white-space:nowrap;flex-wrap:nowrap">'+types.map(t=>'<button role="tab" aria-selected="'+(selectedAssetType===t.id)+'" data-asset-type="'+t.id+'" class="'+(selectedAssetType===t.id?'active':'')+'" style="flex-shrink:0">'+esc(t.name)+' <span class="mini">'+db.assets.filter(a=>a.type===t.id).length+'</span></button>').join('')+'</div><div class="toolbar"><strong>素材分类</strong><div class="tabs" role="tablist" aria-label="素材分类" style="min-width:0;overflow-x:auto;white-space:nowrap">'+groupTabs+'</div><button class="right" onclick="manageGroups()">管理分类</button><button onclick="groupPreview()">前端预览</button></div>';
 }
-function render(){if(page==='backgrounds'){renderBackgrounds();return}if(page==='growth'){renderGrowth();return}document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));const t=titles[page];$('#main').innerHTML=`<div class="crumb">艺粉商业化 / 专属守护 / ${t[0]}</div><div class="heading"><div><h1>${t[0]}</h1><p class="desc">${t[1]}</p></div><button class="primary right" id="create">＋ ${page==='materials'?(tab==='types'?'新建权益类型':'上传素材'):page==='delivery'?'新建投放':'新建其他运营资源位'}</button></div><div class="notice">${page==='materials'?'本模块配置权益大分类、类型名称、资产使用方式及展示／交互模板，并维护各类型下的素材名称、素材文件、预览和上下架状态。':page==='delivery'?'严格校验：人群命中 + 艺人命中 + 有效期内 + 会员身份达标 + 守护天数达标，才可领取与使用。':'资源位只负责展示与引导，不发放物料，不控制 NEW 标；点击、停用和到期都不会改变物料状态。'}</div>${page==='resources'?resourceOrderPanel():''}${page==='materials'?'<div class="flow"><span>01 建立权益类型</span>→<span>02 上传与管理素材</span></div>':''}<div class="panel">${page==='materials'?`<div class="tabs"><button data-tab="types" class="${tab==='types'?'active':''}">权益类型 <span class="mini">${db.types.length}</span></button><button data-tab="assets" class="${tab==='assets'?'active':''}">素材样式 <span class="mini">${db.assets.length}</span></button></div>`:''}${page==='materials'&&tab==='assets'?materialTypeTabs():''}<div class="toolbar"><input id="search" placeholder="搜索名称或 ID" value="${esc(query)}" style="width:260px"><button id="searchBtn">查询</button><button class="link" id="clear">重置</button><span class="right subtle">${page==='resources'?'仅其他运营资源位参与此处排序':page==='delivery'?'多条投放命中：素材合并、去重':'成长基础素材自动可用；运营扩展素材按策略生效'}</span></div><div id="listing"></div></div><p class="mini" style="margin-top:16px">原型说明：成长梯度依据最新截图：开启（D1）、D11、D33、D99、D199、D365。艺人 ID、人群包与素材为示例；铁盒背景图从 D11 开放。当前操作仅保存在本次页面会话。</p>`;$('#create').onclick=()=>openEditor(page==='materials'?tab:page);$('#searchBtn').onclick=()=>{query=$('#search').value;listing()};$('#search').onkeydown=e=>{if(e.key==='Enter')$('#searchBtn').click()};$('#clear').onclick=()=>{query='';render()};document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;query='';render()});document.querySelectorAll('[data-asset-type]').forEach(b=>b.onclick=()=>{selectedAssetType=b.dataset.assetType;selectedAssetGroup='';query='';render()});document.querySelectorAll('[data-asset-group]').forEach(b=>b.onclick=()=>{selectedAssetGroup=b.dataset.assetGroup;query='';render()});listing()}
+function render(){if(page==='backgrounds'){renderBackgrounds();return}if(page==='growth'){renderGrowth();return}document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===page));const t=titles[page];$('#main').innerHTML=`<div class="crumb">艺粉商业化 / 专属守护 / ${t[0]}</div><div class="heading"><div><h1>${t[0]}</h1><p class="desc">${t[1]}</p></div><button class="primary right" id="create">＋ ${page==='materials'?(tab==='types'?'新建权益类型':'上传素材'):page==='delivery'?'新建投放':'新建其他运营资源位'}</button></div><div class="notice">${page==='materials'?'本模块配置权益大分类、类型名称、资产使用方式及展示／交互模板，并维护各类型下的素材名称、素材文件、预览和上下架状态。':page==='delivery'?'严格校验：人群命中 + 艺人命中 + 有效期内 + 会员身份达标 + 守护天数达标，才可领取与使用。':'资源位只负责展示与引导，不发放物料，不控制 NEW 标；点击、停用和到期都不会改变物料状态。'}</div>${page==='resources'?resourceOrderPanel():''}${page==='materials'?'<div class="flow"><span>01 建立权益类型</span>→<span>02 上传与管理素材</span></div>':''}<div class="panel">${page==='materials'?`<div class="tabs"><button data-tab="types" class="${tab==='types'?'active':''}">权益类型 <span class="mini">${db.types.length}</span></button><button data-tab="assets" class="${tab==='assets'?'active':''}">素材样式 <span class="mini">${db.assets.length}</span></button></div>`:''}${page==='materials'&&tab==='assets'?materialTypeTabs():''}<div class="toolbar"><input id="search" placeholder="搜索名称或 ID" value="${esc(query)}" style="width:260px"><button id="searchBtn">查询</button><button class="link" id="clear">重置</button><span class="right subtle">${page==='resources'?'仅其他运营资源位参与此处排序':page==='delivery'?'多条投放命中：素材合并、去重':'成长基础素材自动可用；运营扩展素材按策略生效'}</span></div><div id="listing"></div></div><p class="mini" style="margin-top:16px">原型说明：成长梯度依据最新截图：开启（D1）、D11、D33、D99、D199、D365。艺人 ID、人群包与素材为示例。当前操作仅保存在本次页面会话。</p>`;$('#create').onclick=()=>openEditor(page==='materials'?tab:page);$('#searchBtn').onclick=()=>{query=$('#search').value;listing()};$('#search').onkeydown=e=>{if(e.key==='Enter')$('#searchBtn').click()};$('#clear').onclick=()=>{query='';render()};document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;query='';render()});document.querySelectorAll('[data-asset-type]').forEach(b=>b.onclick=()=>{selectedAssetType=b.dataset.assetType;selectedAssetGroup='';query='';render()});document.querySelectorAll('[data-asset-group]').forEach(b=>b.onclick=()=>{selectedAssetGroup=b.dataset.assetGroup;query='';render()});listing()}
 function materialImage(r){return r.image?'<img src="'+esc(r.image)+'" alt="'+esc(r.name)+'" style="width:88px;height:88px;object-fit:contain;border:1px solid #e6e8ef;border-radius:8px;background:#f7f8fa" onerror="this.style.display=&quot;none&quot;;this.nextElementSibling.style.display=&quot;flex&quot;"><span style="display:none;width:88px;height:88px;align-items:center;justify-content:center;background:#f7f8fa;color:#8790a2;font-size:12px;border-radius:8px">图片加载失败</span>':'<span style="display:flex;width:88px;height:88px;align-items:center;justify-content:center;background:#f7f8fa;color:#8790a2;font-size:12px;border-radius:8px">暂无素材图</span>'}
 function isBase(id){return Object.values(db.growth||{}).some(g=>g.status==='已发布'&&g.assets.includes(id))}
 function listing(){const k=page==='materials'?tab:page==='delivery'?'deliveries':'resources';const rows=db[k].filter(r=>k!=='assets'||(r.type===selectedAssetType&&assignedGroup(r).id===selectedAssetGroup)).filter(r=>(r.name+r.id).toLowerCase().includes(query.toLowerCase()));let out='';if(page==='resources')out=rows.map(r=>`<div class="resource-card"><div class="preview">${promo(r)}</div><div><h2>${esc(r.name)}</h2>${pill(r.status)} <span class="subtle">${r.id} · 其他运营资源位 · 内部优先级 ${r.priority}</span><dl class="kv"><dt>展示样式</dt><dd>${esc(r.style||"活动卡片")}</dd><dt>点击行为</dt><dd>${esc(r.action||"链接跳转")} · ${esc(r.action==="页内定位"?r.target:r.url)}</dd><dt>展示资格</dt><dd>${esc(r.member)} · ${esc(r.eligibility)}</dd><dt>投放时间</dt><dd>${esc(r.start.replace('T',' '))}<br>至 ${esc(r.end.replace('T',' '))}</dd><dt>用户范围</dt><dd>${esc(r.aud)}</dd><dt>艺人范围</dt><dd>${esc(r.artistMode)}</dd></dl>${actions(r,k)}</div></div>`).join('');else {let heads=k==='types'?['权益类型','大分类','资产使用方式','上架样式数','状态','操作']:k==='assets'?['素材图','标题','ID','素材分类','素材用途','状态','操作']:['投放计划','投放内容','人群 / 艺人范围','展示时间','状态','操作'];out=`<table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>{let cells;if(k==='types'){const g=rule(r.rule);cells=[nameCell({...r,image:r.exampleImage||r.image},'▧'),categories[r.category][0],usageCell(r),r.valueKind==='number'?'按节点设置':db.assets.filter(a=>a.type===r.id&&a.status==='已上架').length,pill(r.status),actions(r,k)]}else if(k==='assets'){const t=type(r.type),g=rule(r.rule||t.rule);cells=[materialImage(r),'<b>'+esc(r.name)+'</b>',esc(r.id),esc(assignedGroup(r).name),(isBase(r.id)?'成长基础素材':'未选为基础素材'),pill(r.status),actions(r,k)]}else cells=[`<b>${esc(r.name)}</b><br><span class="subtle">${r.id}</span>`,`${r.source==='dress'?'现有装扮 · '+esc(r.dressIds.join('、')):esc(type(r.type).name)}<br><span class="subtle">${r.source==='dress'?'引用装扮后台':esc(r.grant==='成品'?'赠送成品 × '+r.pieces:r.mode)}</span><br>${markChip(r.markKind||'上新标',r.markText)}`,`${esc(r.pack||r.aud)}<br><span class="subtle">${esc(r.artistMode)}${r.artists?' · '+r.artists.split(',').length+' 位':''}</span>`,`${esc(r.start.replace('T',' '))}<br><span class="subtle">至 ${esc(r.end.replace('T',' '))}</span>`,pill(r.status),actions(r,k)];return '<tr>'+cells.map(c=>`<td>${c}</td>`).join('')+'</tr>'}).join('')}</tbody></table>`}$('#listing').innerHTML=(rows.length?out:'<div class="empty">没有匹配内容，请调整搜索条件或新建配置。</div>')+`<div class="footer">共 ${rows.length} 条<span class="right">${rows.length?'第 1 页 · 已展示全部':''}</span></div>`;document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openEditor(b.dataset.kind,b.dataset.edit));document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=()=>{const r=db[k].find(x=>x.id===b.dataset.toggle);r.status=k==='types'||k==='assets'?(r.status==='已上架'?'已下架':'已上架'):(r.status==='已停用'?'草稿':'已停用');listing();toast('状态已更新（本地演示）')});document.querySelectorAll('[data-test]').forEach(b=>b.onclick=()=>simulator(db[k].find(x=>x.id===b.dataset.test)))}
@@ -150,20 +150,17 @@ function renderGrowth(){
  const visible=g=>editing||g.status==='已发布';
  const entry=(id,name)=>editing?`<button class="link" data-growth-id="${esc(id)}">${esc(name)}</button>`:esc(name);
  const exclusiveDress=dressGrowth.some(g=>visible(g)&&g.member==='SVIP');
- const tinHeaders=['铁盒外形','铁盒背景','铁盒名额','DIY 物料','铁盒装饰品'];
+ const tinHeaders=['铁盒外形','铁盒名额','DIY 物料','铁盒装饰品'];
  if(exclusiveDress)tinHeaders.push('专属装扮');
  if(editing)tinHeaders.push('实物制作');
  const cells=stages.map(n=>{
   const mats=Object.values(db.growth).filter(g=>visible(g)&&rule(g.rule).days===n.days);
-  const materialColumn=key=>mats.filter(g=>{
-   const t=type(g.type);
-   return (t.id==='T003'||t.template==='容器背景'||t.name==='铁盒背景自定义'?'background':t.category)===key;
-  }).map(g=>entry(key==='box'?g.type+'@'+n.days:g.type,key==='box'?g.assets.map(id=>db.assets.find(a=>a.id===id)?.name||id).join('、'):type(g.type).name)).join('<br>')||'—';
+  const materialColumn=key=>mats.filter(g=>type(g.type).category===key).map(g=>entry(key==='box'?g.type+'@'+n.days:g.type,key==='box'?g.assets.map(id=>db.assets.find(a=>a.id===id)?.name||id).join('、'):type(g.type).name)).join('<br>')||'—';
   const dresses=exclusive=>dressGrowth.filter(g=>visible(g)&&g.days===n.days&&(g.member==='SVIP')===exclusive).map(g=>entry(g.id,g.name)+(editing?'<br><span class="mini">'+esc(g.dressIds.join('、'))+'</span>':'')).join('<br>')||'—';
   const row=[esc(n.label),dresses(false)];
   if(showTin){
    const quota=numericGrowth.find(g=>visible(g)&&g.days===n.days);
-   row.push(materialColumn('box'),materialColumn('background'),quota?entry(quota.id,'共 '+quota.value+' 个'):'—',materialColumn('item'),materialColumn('decor'));
+   row.push(materialColumn('box'),quota?entry(quota.id,'共 '+quota.value+' 个'):'—',materialColumn('item'),materialColumn('decor'));
    if(exclusiveDress)row.push(dresses(true));
    if(editing)row.push('一期关闭');
   }
@@ -253,10 +250,10 @@ function bindTypeFields(r){
  $('#typeNameField').style.display=body&&!r.id?'none':'';
  document.querySelectorAll('.drawer-foot button').forEach(b=>{if(/保存草稿|发布|上架/.test(b.textContent))b.disabled=body&&!r.id});
  if(body&&!r.id){$('#typeDetails').innerHTML='<div class="notice">铁盒本体包含两个固定权益类型，无需新建。</div><div class="panel" style="padding:20px"><h3>铁盒外形</h3><p>上传经典、异形、周年等外形素材，在成长权益中配置开放节点。</p><button type="button" onclick="openEditor(&quot;types&quot;,&quot;T005&quot;)">管理铁盒外形</button><h3>铁盒名额</h3><p>按成长节点填写可用总上限，无需上传素材。</p><button type="button" onclick="closeModal();page=&quot;growth&quot;;render()">配置铁盒名额</button></div>';return}
- $('#name').disabled=['box','quota'].includes(k)||r.id==='T003';
+ $('#name').disabled=['box','quota'].includes(k);
  const control=canChoose?select('assetUse',['reusable','singleBox'].map(v=>[v,assetUseLabels[v]]),value):'<div class="locked">'+assetUseLabels[value]+'</div>';
  $('#typeDetails').innerHTML=(body?'<div class="notice">系统固定类型：'+esc(r.name)+'。外形上传素材，名额在成长权益配置总上限。</div>':'')+field('资产使用方式',control,canChoose?(locked?'首次上架后锁定，素材与投放继承此值。':'请选择使用方式，首次上架后锁定。'):k==='decor'?'铁盒装饰品固定为可重复使用，不计件，可跨盒使用。':'系统预置使用规则。')+
- (k==='quota'?'':field('展示 / 交互模板',select('template',[...new Set([...(r.template?[r.template]:[]),categories[k][2],...(k==='decor'?['平面贴纸','容器背景']:k==='item'?['相片边框','平面卡片']:[])])],r.template||categories[k][2])));
+ (k==='quota'?'':field('展示 / 交互模板',select('template',[...new Set([...(r.template?[r.template]:[]),categories[k][2],...(k==='decor'?['平面贴纸']:k==='item'?['相片边框','平面卡片']:[])])],r.template||categories[k][2])));
  if($('#assetUse')){$('#assetUse').required=true;$('#assetUse').disabled=!!locked;}}
  cat.onchange=draw;draw();
 }
@@ -281,20 +278,20 @@ function seedType(t,category,day,styles){
  const assets=styles.map((name,i)=>{const id='S'+t.id.slice(1)+'_'+i;db.assets.push({id,type:t.id,name,status:'已上架'});return id});
  db.growth[t.id]={...commonScope,rule:t.rule,type:t.id,assets};
 }
-const [stickers,polaroid,background,quota,classic]=db.types;
-stickers.category='decor';polaroid.category='item';background.category='decor';quota.category='quota';
-stickers.name='通用贴纸';background.name='铁盒背景图';background.rule=db.growth[background.id].rule='DIY_D11';
+const [stickers,polaroid,quota,classic]=db.types;
+stickers.category='decor';polaroid.category='item';quota.category='quota';
+stickers.name='通用贴纸';
 classic.name='经典马口铁盒';seedType(classic,'box',1,['经典原色']);
-function addExample(name,category,day){
- const t={id:'T'+String(db.types.length+1).padStart(3,'0'),name,template:categories[category][2]};db.types.push(t);seedType(t,category,day,[name+' · 基础款']);
+function addExample(id,name,category,day){
+ const t={id,name,template:categories[category][2]};db.types.push(t);seedType(t,category,day,[name+' · 基础款']);
 }
-for(const [name,category,day] of [
- ['小卡','item',1],['字母贴纸','decor',1],['数字贴纸','decor',1],
- ['异形铁盒 1','box',11],['自定义图片贴纸','item',11],['挂件 1','item',11],
- ['异形铁盒 2','box',33],['自定义文字贴纸','item',33],['听歌回忆票根（二期）','decor',33],
- ['异形铁盒 3','box',99],['吧唧','item',99],['铁盒背景自定义','decor',99],
- ['异形铁盒 4','box',199],['挂件 2','item',199],['周年纪念盒（带年份）','box',365],['周年限定物料模板','item',365]
-])addExample(name,category,day);
+for(const [id,name,category,day] of [
+ ['T006','小卡','item',1],['T007','字母贴纸','decor',1],['T008','数字贴纸','decor',1],
+ ['T009','异形铁盒 1','box',11],['T010','自定义图片贴纸','item',11],['T011','挂件 1','item',11],
+ ['T012','异形铁盒 2','box',33],['T013','自定义文字贴纸','item',33],['T014','听歌回忆票根（二期）','decor',33],
+ ['T015','异形铁盒 3','box',99],['T016','吧唧','item',99],
+ ['T018','异形铁盒 4','box',199],['T019','挂件 2','item',199],['T020','周年纪念盒（带年份）','box',365],['T021','周年限定物料模板','item',365]
+])addExample(id,name,category,day);
 const boxTypes=db.types.filter(t=>t.category==='box');
 for(const t of boxTypes){
  const g=db.growth[t.id],day=rule(g.rule).days;
@@ -302,7 +299,7 @@ for(const t of boxTypes){
  delete db.growth[t.id];db.growth[classic.id+'@'+day]={...g,type:classic.id};
 }
 db.types=db.types.filter(t=>t.category!=='box'||t.id===classic.id);
-classic.name='铁盒外形';quota.name='铁盒名额';background.name='铁盒背景';
+classic.name='铁盒外形';quota.name='铁盒名额';
 for(const t of db.types)t.assetUse=defaultAssetUse[t.category];
 const dressExamples=[['基础款会员标','基础款皮肤','专属启动图'],['基础款头像挂件','APP 图标'],['进阶款会员标','基础款侧边栏卡板'],['进阶款头像挂件','红心动效'],['升级款侧边栏卡板','进阶款皮肤'],['升级款头像挂件','个人主页进入动效']];
 stages.forEach((n,i)=>{const names=dressExamples[i];const ids=names.map((name,j)=>{const id=String(91000+i*10+j);dressCatalog.push({id,name,type:'外显装扮',member:'VIP / SVIP',days:n.days,status:'已上架',icon:'◇'});return id});dressGrowth.push({...commonScope,id:'DG'+n.days,name:names.join('、'),dressIds:ids,member:'VIP / SVIP',days:n.days});});
