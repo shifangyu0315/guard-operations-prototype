@@ -139,7 +139,13 @@ function groupPreview(){
 }
 function bindAssetGroup(r){
  const source=$('#type'),host=document.createElement('div');source.closest('.field').after(host);
- const draw=()=>{const groups=materialGroups(source.value);host.innerHTML=field('素材分类',select('groupId',groups.map(g=>[g.id,g.name]),r.type===source.value?assignedGroup(r).id:groups[0].id),'在该物料类型下展示的前端分类。')};source.addEventListener('change',draw);draw();
+ const draw=(selected)=>{const groups=materialGroups(source.value);host.innerHTML=field('素材分类','<div style="display:flex;gap:12px;align-items:center">'+select('groupId',groups.map(g=>[g.id,g.name]),selected||(r.type===source.value?assignedGroup(r).id:groups[0].id))+'<button type="button" data-add-category style="white-space:nowrap">＋ 新增分类</button></div><div data-category-editor hidden style="margin-top:12px"><div style="display:flex;gap:12px"><input data-category-name placeholder="例如：生日限定、圣诞" aria-label="新分类名称"><button type="button" data-confirm-category style="white-space:nowrap">确认新增</button><button type="button" data-cancel-category>取消</button></div><p data-category-error role="alert" style="color:#e5484d"></p></div>','选择已有分类，或新增当前物料类型的分类；新增后自动选中。');
+  const editor=host.querySelector('[data-category-editor]'),entry=host.querySelector('[data-category-name]'),error=host.querySelector('[data-category-error]');
+  host.querySelector('[data-add-category]').onclick=()=>{editor.hidden=false;entry.focus()};
+  host.querySelector('[data-cancel-category]').onclick=()=>{editor.hidden=true;entry.value='';error.textContent=''};
+  const add=()=>{const name=entry.value.trim();if(!name){error.textContent='请填写分类名称';return}if(groups.some(g=>g.name===name)){error.textContent='当前类型已有同名分类，请直接选择';return}const group={id:'group-'+crypto.randomUUID(),name};groups.push(group);draw(group.id);toast('分类已新增并选中')};
+  host.querySelector('[data-confirm-category]').onclick=add;entry.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add()}};
+ };source.addEventListener('change',()=>draw());draw();
 }
 // 文字入口使用已接入的文字贴纸模板；字数和字体随素材样式。
 function isTextStyle(typeId){return type(typeId).template==='文字贴纸模板'}
