@@ -292,13 +292,26 @@ function nodeGrowthEditor(days){
  const dresses=dressGrowth.filter(g=>g.days===days), dressIds=new Set(dresses.flatMap(g=>g.dressIds));
  const numbers=numericGrowth.filter(g=>g.days===days);
  let dirty=false;
+ const scopeRows=new Map();
+ const scopeUI=(key,old={})=>{
+  if(!scopeRows.has(key))scopeRows.set(key,{aud:old.aud||'全部用户',pack:old.pack||'',artistMode:old.artistMode||'全部艺人',artistId:old.artistId||''});
+  const r=scopeRows.get(key);
+  return `<div data-row-scope="${esc(key)}" style="margin-top:16px"><label><input type="checkbox" data-limit="aud" ${r.aud==='指定人群'?'checked':''}> 限制用户范围</label><div data-scope-user ${r.aud==='指定人群'?'':'hidden'}><select aria-label="用户人群" data-scope-field="pack"><option value="">请选择用户人群</option>${['二次元兴趣人群','高活跃守护用户','新开启守护用户'].map(x=>`<option ${r.pack===x?'selected':''}>${x}</option>`).join('')}</select></div><label style="display:block;margin-top:12px"><input type="checkbox" data-limit="artistMode" ${r.artistMode==='艺人圈选'?'checked':''}> 限制艺人范围</label><div data-scope-artist ${r.artistMode==='艺人圈选'?'':'hidden'}><input aria-label="艺人 ID" data-scope-field="artistId" value="${esc(r.artistId)}" placeholder="填写艺人 ID"></div></div>`;
+ };
+ const bindScopes=()=>document.querySelectorAll('[data-row-scope]').forEach(el=>{
+  const r=scopeRows.get(el.dataset.rowScope);
+  el.querySelectorAll('[data-limit]').forEach(e=>e.onchange=()=>{const user=e.dataset.limit==='aud';r[e.dataset.limit]=user?(e.checked?'指定人群':'全部用户'):(e.checked?'艺人圈选':'全部艺人');el.querySelector(user?'[data-scope-user]':'[data-scope-artist]').hidden=!e.checked;dirty=true});
+  el.querySelectorAll('[data-scope-field]').forEach(e=>e.oninput=()=>{r[e.dataset.scopeField]=e.value;dirty=true});
+ });
+ const savedScope=(key,errors)=>{const r=scopeRows.get(key)||{},v={aud:r.aud||'全部用户',pack:r.aud==='指定人群'?r.pack:'',artistMode:r.artistMode||'全部艺人',artistId:r.artistMode==='艺人圈选'?r.artistId.trim():''};if(v.aud==='指定人群'&&!v.pack)errors.push('限制用户范围后，请选择用户人群。');validateArtistScope(v,errors);return {...v,markKind:'',markText:''}};
+
  const earlier=t=>Object.values(db.growth).filter(g=>g.type===t&&g.status==='已发布'&&rule(g.rule).days<days).flatMap(g=>g.assets);
  const elsewhere=id=>Object.values(db.growth).find(g=>rule(g.rule).days!==days&&g.assets.includes(id));
  const emptyMaterialRows={box:0,diy:0,sticker:0,text:0};
  const liveTypes=db.types.filter(t=>t.valueKind!=='number'&&(t.status==='已上架'||chosen.has(t.id)));
- $('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="按节点配置成长权益"><div class="drawer-head"><h2>配置成长权益</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="nodeErrors" role="alert"></div>${field('成长节点',select('nodeDay',stages.map(n=>[String(n.days),n.label]),String(days)))}<div class="notice">各类权益均为选填。选择物料类型后，勾选本节点新增解锁的具体样式；此前已解锁的样式继续可用，无需重复选择。上传新素材不会自动加入已配置节点。</div>${['box','diy','sticker','text'].map((cat,i)=>section('0'+(i+1),displayCategories[cat]+' · 选填','<div id="nodeMaterials-'+cat+'"></div>')).join('')}${section('05','装扮权益 · 选填','<p class="hint">选择装扮类型，手动填写装扮 ID 进行关联。会员范围和最低节点沿用装扮自身门槛。</p><div id="nodeDress"></div>')}${section('06','铁盒名额 · 选填',db.types.filter(t=>t.valueKind==='number').map(t=>field(t.name+'（选填）',`<select aria-label="名额类型" data-number-type="${esc(t.id)}" ${numbers.some(g=>g.type===t.id&&g.status==='已发布')?'disabled':''}><option value="">请选择名额类型</option><option value="${esc(t.id)}" ${numbers.some(g=>g.type===t.id)?'selected':''}>${esc(t.name)}</option></select><input aria-label="节点总上限" style="margin-top:12px;display:${numbers.some(g=>g.type===t.id)?'block':'none'}" data-node-number="${esc(t.id)}" type="number" min="1" step="1" value="${numbers.find(g=>g.type===t.id)?.value||''}" placeholder="留空则不配置">`,'填写此节点可用总上限，不是新增量；沿成长节点不递减。',false)).join(''))}${section("07","新增权益适用范围与权益标",scope({})+markFields({},true))}<p class="hint">以上范围和权益标用于新增权益；已有配置保留原范围与权益标。物料身份门槛继承权益类型。</p></div><div class="drawer-foot"><span class="subtle">本地演示，刷新重置</span><button class="right" onclick="closeModal()">取消</button><button class="primary" id="nodeSave">保存并发布节点配置</button></div></div></div>`;
- bindAudienceScope();bindMark();
- document.querySelectorAll('[data-number-type]').forEach(e=>e.onchange=()=>{const input=document.querySelector('[data-node-number='+e.dataset.numberType+']');input.style.display=e.value?'block':'none';if(!e.value)input.value='';dirty=true});
+ $('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="按节点配置成长权益"><div class="drawer-head"><h2>配置成长权益</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="nodeErrors" role="alert"></div>${field('成长节点',select('nodeDay',stages.map(n=>[String(n.days),n.label]),String(days)))}<div class="notice">各类权益均为选填。选择物料类型后，勾选本节点新增解锁的具体样式；此前已解锁的样式继续可用，无需重复选择。上传新素材不会自动加入已配置节点。</div>${['box','diy','sticker','text'].map((cat,i)=>section('0'+(i+1),displayCategories[cat]+' · 选填','<div id="nodeMaterials-'+cat+'"></div>')).join('')}${section('05','装扮权益 · 选填','<p class="hint">选择装扮类型，手动填写装扮 ID 进行关联。会员范围和最低节点沿用装扮自身门槛。</p><div id="nodeDress"></div>')}${section('06','铁盒名额 · 选填',db.types.filter(t=>t.valueKind==='number').map(t=>field(t.name+'（选填）',`<select aria-label="名额类型" data-number-type="${esc(t.id)}" ${numbers.some(g=>g.type===t.id&&g.status==='已发布')?'disabled':''}><option value="">请选择名额类型</option><option value="${esc(t.id)}" ${numbers.some(g=>g.type===t.id)?'selected':''}>${esc(t.name)}</option></select><input aria-label="节点总上限" style="margin-top:12px;display:${numbers.some(g=>g.type===t.id)?'block':'none'}" data-node-number="${esc(t.id)}" type="number" min="1" step="1" value="${numbers.find(g=>g.type===t.id)?.value||''}" placeholder="留空则不配置"><div data-number-scope="${esc(t.id)}" ${numbers.some(g=>g.type===t.id)?'':'hidden'}>${scopeUI('number-'+t.id,numbers.find(g=>g.type===t.id))}</div>`,'填写此节点可用总上限，不是新增量；沿成长节点不递减。',false)).join(''))}</div><div class="drawer-foot"><span class="subtle">本地演示，刷新重置</span><button class="right" onclick="closeModal()">取消</button><button class="primary" id="nodeSave">保存并发布节点配置</button></div></div></div>`;
+ bindScopes();
+ document.querySelectorAll('[data-number-type]').forEach(e=>e.onchange=()=>{const input=document.querySelector('[data-node-number='+e.dataset.numberType+']');input.style.display=e.value?'block':'none';document.querySelector('[data-number-scope='+e.dataset.numberType+']').hidden=!e.value;if(!e.value)input.value='';dirty=true});
  const drawMaterials=()=>{
   for(const cat of ['box','diy','sticker','text']){
   const options=liveTypes.filter(t=>displayCategory(t)===cat&&!chosen.has(t.id));
@@ -306,7 +319,7 @@ function nodeGrowthEditor(days){
   const typeOptions=selected=>'<option value="">请选择物料类型</option>'+liveTypes.filter(t=>displayCategory(t)===cat&&(!chosen.has(t.id)||t.id===selected)).map(t=>`<option value="${esc(t.id)}" ${t.id===selected?'selected':''}>${esc(t.name)}</option>`).join('');
   $('#nodeMaterials-'+cat).innerHTML=[...chosen].some(([id])=>displayCategory(type(id))===cat)?[...chosen].filter(([id])=>displayCategory(type(id))===cat).map(([id,row])=>{
    const t=type(id),prior=new Set(earlier(id)),assets=db.assets.filter(a=>a.type===id);
-   return `<div class="panel" style="padding:18px;margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div class="field" style="flex:1;margin:0"><label>物料类型</label><select aria-label="物料类型" data-change-type="${esc(id)}" ${row.old?.status==='已发布'?'disabled':''}>${typeOptions(id)}</select></div><span class="badge">${prior.size?'继续新增样式':'本节点首次开放'}</span><button class="link right" data-remove-type="${esc(id)}" ${row.old?.status==='已发布'?'disabled':''}>移除类型</button></div><p class="hint">此前已解锁 ${prior.size} 款 · 本节点新增 ${row.assets.size} 款 · 累计 ${new Set([...prior,...row.assets]).size} 款</p><button class="link" data-select-all="${esc(id)}">全选可用素材</button><div class="checklist">${assets.map(a=>{const other=elsewhere(a.id),locked=other||a.status!=='已上架'||row.old?.status==='已发布'&&row.old.assets.includes(a.id);return `<label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-node-asset="${esc(a.id)}" data-type="${esc(id)}" ${row.assets.has(a.id)?'checked':''} ${locked?'disabled':''}>${materialImage(a)}<span><b>${esc(a.name)}</b><br><span class="mini">${esc(a.id)} · ${esc(a.status)}${other?' · '+(rule(other.rule).days<days?'此前节点已关联':'后续节点已关联')+' D'+rule(other.rule).days:''}</span></span></label>`}).join('')||'<p class="hint">暂无素材，请先到素材管理上传。</p>'}</div></div>`;
+   return `<div class="panel" style="padding:18px;margin-bottom:16px"><div style="display:flex;align-items:center;gap:12px"><div class="field" style="flex:1;margin:0"><label>物料类型</label><select aria-label="物料类型" data-change-type="${esc(id)}" ${row.old?.status==='已发布'?'disabled':''}>${typeOptions(id)}</select></div><span class="badge">${prior.size?'继续新增样式':'本节点首次开放'}</span><button class="link right" data-remove-type="${esc(id)}" ${row.old?.status==='已发布'?'disabled':''}>移除类型</button></div><p class="hint">此前已解锁 ${prior.size} 款 · 本节点新增 ${row.assets.size} 款 · 累计 ${new Set([...prior,...row.assets]).size} 款</p><button class="link" data-select-all="${esc(id)}">全选可用素材</button><div class="checklist">${assets.map(a=>{const other=elsewhere(a.id),locked=other||a.status!=='已上架'||row.old?.status==='已发布'&&row.old.assets.includes(a.id);return `<label style="display:flex;gap:10px;align-items:center"><input type="checkbox" data-node-asset="${esc(a.id)}" data-type="${esc(id)}" ${row.assets.has(a.id)?'checked':''} ${locked?'disabled':''}>${materialImage(a)}<span><b>${esc(a.name)}</b><br><span class="mini">${esc(a.id)} · ${esc(a.status)}${other?' · '+(rule(other.rule).days<days?'此前节点已关联':'后续节点已关联')+' D'+rule(other.rule).days:''}</span></span></label>`}).join('')||'<p class="hint">暂无素材，请先到素材管理上传。</p>'}</div>${scopeUI('material-'+id,row.old)}</div>`;
   }).join(''):'';
   $('#nodeMaterials-'+cat).innerHTML+=Array.from({length:emptyMaterialRows[cat]},(_,i)=>`<div class="panel" style="padding:18px;margin-bottom:16px"><label>物料类型</label><select aria-label="${displayCategories[cat]}类型" data-empty-category="${cat}">${typeOptions('')}</select><p class="hint">选择类型后显示对应素材，可留空。</p></div>`).join('')+`<button data-add-category="${cat}" ${!options.length||emptyMaterialRows[cat]?'disabled':''}>＋ 新增</button>`;
   }
@@ -316,37 +329,42 @@ function nodeGrowthEditor(days){
   document.querySelectorAll('[data-remove-type]').forEach(b=>b.onclick=()=>{chosen.delete(b.dataset.removeType);dirty=true;drawMaterials()});
   document.querySelectorAll('[data-node-asset]').forEach(c=>c.onchange=()=>{const s=chosen.get(c.dataset.type).assets;c.checked?s.add(c.dataset.nodeAsset):s.delete(c.dataset.nodeAsset);dirty=true;drawMaterials()});
   document.querySelectorAll('[data-select-all]').forEach(b=>b.onclick=()=>{const row=chosen.get(b.dataset.selectAll);db.assets.filter(a=>a.type===b.dataset.selectAll&&a.status==='已上架'&&!elsewhere(a.id)).forEach(a=>row.assets.add(a.id));dirty=true;drawMaterials()});
+ bindScopes();
  };
 
  drawMaterials();
  const kinds=[...new Set(dressCatalog.map(d=>d.type))];
  const dressRows=[];
- for(const kind of kinds){const ids=[...dressIds].filter(id=>dressCatalog.find(d=>d.id===id)?.type===kind);if(ids.length)dressRows.push({type:kind,text:ids.join(', ')})}
+ for(const g of dresses)for(const kind of kinds){const ids=g.dressIds.filter(id=>dressCatalog.find(d=>d.id===id)?.type===kind);if(ids.length)dressRows.push({type:kind,text:ids.join(', '),old:g})}
+ let dressScopeSeq=0;
  if(!dressRows.length)dressRows.push({type:'',text:''});
  const drawDress=()=>{
-  $('#nodeDress').innerHTML=dressRows.map((row,i)=>`<div class="panel" style="padding:16px;margin-bottom:12px"><div class="grid"><div class="field"><label for="nodeDressType${i}">装扮类型</label><select id="nodeDressType${i}" data-dress-type="${i}"><option value="">请选择装扮类型</option>${kinds.map(kind=>`<option value="${esc(kind)}" ${kind===row.type?'selected':''}>${esc(kind)}</option>`).join('')}</select></div><div class="field"><label for="nodeDressIds${i}">装扮 ID</label><textarea id="nodeDressIds${i}" data-dress-ids="${i}" rows="2" placeholder="填写装扮 ID，多个 ID 用逗号或换行分隔">${esc(row.text)}</textarea></div></div><button class="link" data-remove-dress="${i}">移除此组</button></div>`).join('')+'<button id="addNodeDress">＋ 添加装扮关联</button><p class="hint">整项选填；填写任一字段后，需同时填写类型与 ID。此处不展示装扮库。当前原型仅使用示例数据校验，正式环境需接入装扮服务。</p>';
+  dressRows.forEach(row=>{if(!row.scopeKey)row.scopeKey='dress-'+(++dressScopeSeq)});
+  $('#nodeDress').innerHTML=dressRows.map((row,i)=>`<div class="panel" style="padding:16px;margin-bottom:12px"><div class="grid"><div class="field"><label for="nodeDressType${i}">装扮类型</label><select id="nodeDressType${i}" data-dress-type="${i}"><option value="">请选择装扮类型</option>${kinds.map(kind=>`<option value="${esc(kind)}" ${kind===row.type?'selected':''}>${esc(kind)}</option>`).join('')}</select></div><div class="field"><label for="nodeDressIds${i}">装扮 ID</label><textarea id="nodeDressIds${i}" data-dress-ids="${i}" rows="2" placeholder="填写装扮 ID，多个 ID 用逗号或换行分隔">${esc(row.text)}</textarea></div></div>${scopeUI(row.scopeKey,row.old)}<button class="link" data-remove-dress="${i}">移除此组</button></div>`).join('')+'<button id="addNodeDress">＋ 添加装扮关联</button><p class="hint">整项选填；填写任一字段后，需同时填写类型与 ID。此处不展示装扮库。当前原型仅使用示例数据校验，正式环境需接入装扮服务。</p>';
   document.querySelectorAll('[data-dress-type]').forEach(e=>e.onchange=()=>{dressRows[Number(e.dataset.dressType)].type=e.value;dirty=true});
   document.querySelectorAll('[data-dress-ids]').forEach(e=>e.oninput=()=>{dressRows[Number(e.dataset.dressIds)].text=e.value;dirty=true});
   document.querySelectorAll('[data-remove-dress]').forEach(e=>e.onclick=()=>{dressRows.splice(Number(e.dataset.removeDress),1);dirty=true;drawDress()});
   $('#addNodeDress').onclick=()=>{dressRows.push({type:'',text:''});dirty=true;drawDress()};
+ bindScopes();
  };drawDress();
 
- document.querySelectorAll('[data-node-number],#aud,#pack,#artistMode,#artistId,#markText').forEach(i=>i.addEventListener('input',()=>dirty=true));
+ document.querySelectorAll('[data-node-number]').forEach(i=>i.addEventListener('input',()=>dirty=true));
  $('#nodeDay').onchange=()=>{const next=Number($('#nodeDay').value);if(dirty&&!confirm('切换节点会放弃尚未保存的修改，是否继续？')){$('#nodeDay').value=String(days);return}nodeGrowthEditor(next)};
  $('#nodeSave').onclick=()=>{
-  const errors=[],nextMaterials=[],nextNumbers=[],settings={aud:$('#aud').value,pack:$('#aud').value==='指定人群'?$('#pack').value:'',...artistScopeValues(),markKind:'梯度解锁标',markText:$('#markText').value.trim()};validateArtistScope(settings,errors);if(!settings.markText||Array.from(settings.markText).length>8)errors.push('标文案须为 1—8 个字符。');
+  const errors=[],nextMaterials=[],nextNumbers=[];
   for(const [id,row] of chosen){const t=type(id),assets=[...row.assets];
    if(!assets.length)errors.push(t.name+'：请选择至少一款样式，或移除此类型。');
    if(t.status!=='已上架')errors.push(t.name+'：类型尚未上架。');
    for(const aid of assets){const a=db.assets.find(a=>a.id===aid);if(!a||a.type!==id||a.status!=='已上架')errors.push(t.name+'：素材无效或未上架。');if(elsewhere(aid))errors.push(t.name+'：素材已关联其他节点。');if(db.deliveries.some(d=>d.status!=='草稿'&&d.status!=='已停用'&&d.mode==='指定素材'&&(d.assets||[]).includes(aid)))errors.push(t.name+'：素材正在运营投放，请先停用对应投放。');}
-   nextMaterials.push([row.key||id+'@'+days,{aud:'全部用户',artistMode:'全部艺人',markKind:'梯度解锁标',markText:'新解锁',...settings,...row.old,type:id,rule:(t.memberThreshold==='VIP'?'COMMON_D':'DIY_D')+days,assets,status:'已发布'}]);
+   nextMaterials.push([row.key||id+'@'+days,{...row.old,...savedScope('material-'+id,errors),type:id,rule:(t.memberThreshold==='VIP'?'COMMON_D':'DIY_D')+days,assets,status:'已发布'}]);
   }
-  document.querySelectorAll('[data-node-number]').forEach(i=>{const id=i.dataset.nodeNumber,old=numbers.find(g=>g.type===id),value=Number(i.value),t=type(id);if(!i.value){if(document.querySelector('[data-number-type='+id+']')?.value)errors.push(t.name+'：请选择后填写总上限，或清空名额类型。');if(old?.status==='已发布')errors.push(t.name+'：已发布配置不能清空。');return}if(!Number.isSafeInteger(value)||value<1)errors.push(t.name+'：请输入正整数。');if(old?.status==='已发布'&&value<old.value)errors.push(t.name+'：已发布总上限不能降低。');if(numericGrowth.some(g=>g.type===id&&g.days!==days&&g.status==='已发布'&&(g.days<days&&g.value>value||g.days>days&&g.value<value)))errors.push(t.name+'：总上限须随节点不递减。');nextNumbers.push({aud:'全部用户',artistMode:'全部艺人',markKind:'梯度解锁标',markText:'新解锁',...settings,...old,id:old?.id||'NG'+id+'_'+days,type:id,days,value,status:'已发布'})});
+  document.querySelectorAll('[data-node-number]').forEach(i=>{const id=i.dataset.nodeNumber,old=numbers.find(g=>g.type===id),value=Number(i.value),t=type(id);if(!i.value){if(document.querySelector('[data-number-type='+id+']')?.value)errors.push(t.name+'：请选择后填写总上限，或清空名额类型。');if(old?.status==='已发布')errors.push(t.name+'：已发布配置不能清空。');return}if(!Number.isSafeInteger(value)||value<1)errors.push(t.name+'：请输入正整数。');if(old?.status==='已发布'&&value<old.value)errors.push(t.name+'：已发布总上限不能降低。');if(numericGrowth.some(g=>g.type===id&&g.days!==days&&g.status==='已发布'&&(g.days<days&&g.value>value||g.days>days&&g.value<value)))errors.push(t.name+'：总上限须随节点不递减。');nextNumbers.push({...old,...savedScope('number-'+id,errors),id:old?.id||'NG'+id+'_'+days,type:id,days,value,status:'已发布'})});
   dressIds.clear();
   for(const [i,row] of dressRows.entries()){
    const ids=row.text.trim().split(/[\s,，、;；]+/).filter(Boolean);
    if(!row.type&&!ids.length)continue;
    if(!row.type||!ids.length){errors.push('装扮第 '+(i+1)+' 组：请同时填写装扮类型与装扮 ID。');continue}
+   row.savedScope=savedScope(row.scopeKey,errors);
    for(const id of ids){
     if(dressIds.has(id))errors.push('装扮 '+id+'：重复填写。');
     dressIds.add(id);
@@ -364,9 +382,11 @@ function nodeGrowthEditor(days){
   for(const [key] of records)delete db.growth[key];
   for(const [key,g] of nextMaterials){db.growth[key]=g;g.assets.forEach(id=>db.assets.find(a=>a.id===id).rule=g.rule);const t=type(g.type);t.rule=Object.values(db.growth).filter(x=>x.type===t.id&&x.status==='已发布').sort((a,b)=>rule(a.rule).days-rule(b.rule).days)[0].rule;}
   numericGrowth=numericGrowth.filter(g=>g.days!==days).concat(nextNumbers);
-  const retained=dresses.map(g=>({...g,dressIds:g.dressIds.filter(id=>dressIds.has(id))})).filter(g=>g.dressIds.length);
-  const newIds=[...dressIds].filter(id=>!dresses.some(g=>g.dressIds.includes(id)));
-  for(const member of ['VIP / SVIP','SVIP']){const ids=newIds.filter(id=>dressCatalog.find(d=>d.id===id).member===member);if(ids.length)retained.push({aud:'全部用户',artistMode:'全部艺人',markKind:'梯度解锁标',markText:'新解锁',...settings,id:'DG'+days+'_'+Date.now()+'_'+member,name:ids.map(id=>dressCatalog.find(d=>d.id===id).name).join('、'),dressIds:ids,member,days,status:'已发布'})}
+  const retained=[];
+  for(const [i,row] of dressRows.entries())for(const member of ['VIP / SVIP','SVIP']){
+   const ids=row.text.trim().split(/[\s,，、;；]+/).filter(Boolean).filter(id=>dressCatalog.find(d=>d.id===id)?.member===member);
+   if(ids.length)retained.push({...row.old,...row.savedScope,id:'DG'+days+'_'+Date.now()+'_'+i+'_'+member,name:ids.map(id=>dressCatalog.find(d=>d.id===id).name).join('、'),dressIds:ids,member,days,status:'已发布'});
+  }
   dressGrowth=dressGrowth.filter(g=>g.days!==days).concat(retained);
   closeModal();renderGrowth();toast('节点配置已保存，按指定素材解锁（仅本地演示）');
  };
