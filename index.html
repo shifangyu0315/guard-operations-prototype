@@ -53,64 +53,38 @@ function slotScope(r,c){
 }
 function slotCandidates(c){
  const rewards=[];
- for(const g of dressGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c))){
-  for(const d of dressLookup(g.dressIds).filter(d=>d.status==='已上架'&&slotScope(d,c)))
-   rewards.push({day:g.days,title:d.name,icon:d.icon||'◇',target:'我的守护装扮'});
- }
+ for(const g of dressGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c)))
+  for(const d of dressLookup(g.dressIds).filter(d=>d.status==='已上架'&&slotScope(d,c)))rewards.push({key:'dress-'+d.type,day:g.days,title:d.type,icon:d.icon||'◇',target:'我的守护装扮'});
  if(c.member==='VIP'||c.member==='SVIP'){
   for(const g of Object.values(db.growth).filter(g=>g.status==='已发布'&&slotScope(g,c))){
-   const t=db.types.find(t=>t.id===g.type&&t.status==='已上架');if(!t)continue;
-   const names=t.category==='box'?g.assets.map(id=>db.assets.find(a=>a.id===id&&a.status==='已上架'&&slotScope(a,c))?.name).filter(Boolean):[t.name];
-   for(const title of names)rewards.push({day:rule(g.rule).days,title,icon:({box:'▣',decor:'✦',item:'▧'})[t.category],target:'铁盒里的珍藏'});
+   const t=db.types.find(t=>t.id===g.type&&t.status==='已上架');
+   if(t&&g.assets.some(id=>db.assets.some(a=>a.id===id&&a.status==='已上架'&&slotScope(a,c))))rewards.push({key:t.id,day:rule(g.rule).days,title:t.name,icon:'▧',target:'我的守护铁盒'});
   }
-  for(const g of numericGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c)&&type(g.type).status==='已上架'))
-   rewards.push({day:g.days,title:type(g.type).name+'（共 '+g.value+' 个）',icon:'▣',target:'我的守护铁盒'});
+  for(const g of numericGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c)&&type(g.type).status==='已上架'))rewards.push({key:g.type,day:g.days,title:type(g.type).name,icon:'▣',target:'我的守护铁盒'});
  }
  return rewards;
 }
+function strategyTarget(r){return r.action==='守护页铁盒模块'||r.action==='守护页装扮模块'?'艺人 '+r.guardArtistId+' · '+r.action:r.action==='仅展示'?'':r.url||''}
 function resolveSlot(c,news,visit){
- function upper(result){visit.key='';return result}
- if(c.frozen)return upper({level:'冻结',icon:'Ⅱ',title:'守护已暂停，查看恢复方式',target:'守护关系管理'});
- const p0=db.resources.filter(r=>!['草稿','已停用'].includes(r.status)&&slotScope(r,c)&&r.start<=c.time&&c.time<r.end)
-  .sort((a,b)=>b.priority-a.priority||(b.publishedAt||0)-(a.publishedAt||0))[0];
- if(p0)return upper({level:'P0',title:p0.title,image:p0.image,icon:'✦',target:p0.url});
- // news is the current user and artist's new-content feed. Catalog status is checked separately.
- const fresh=autoNewEnabled&&news.find(n=>slotScope(n,c)&&n.available&&n.isNew&&n.status==='已上架');
- if(fresh)return upper({level:'P1',title:fresh.type+'上新了',icon:'✦',image:autoNewArt||defaultNewArt,target:fresh.target,front:true});
- const current=stages.filter(s=>s.days<=c.days).at(-1),next=stages.find(s=>s.days>c.days);
- if(!current)return upper(null);
- const pool=slotCandidates(c).filter(r=>r.day===current.days||r.day===next?.days);
- if(!pool.length)return upper(null);
- const key=JSON.stringify([c.member,c.artist,c.pack,c.days,c.confirmed,pool]);
+ if(c.frozen)return {level:'关系提示',icon:'Ⅱ',title:'守护已暂停，查看恢复方式',target:'守护关系管理'};
+ const operator=db.resources.filter(r=>!['草稿','已停用'].includes(r.status)&&artistScopeMatches(r,c.artist)&&(r.aud!=='指定人群'||r.pack===c.pack)&&r.start<=c.time&&c.time<r.end).sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0))[0];
+ if(operator)return {level:'运营策略',title:operator.title,image:operator.image,icon:'✦',target:strategyTarget(operator)};
+ const next=stages.find(s=>s.days>c.days),all=slotCandidates(c);
+ const unique=rows=>[...new Map(rows.map(r=>[r.key,r])).values()];
+ const current=unique(all.filter(r=>r.day<=c.days)),future=unique(all.filter(r=>r.day===next?.days));
+ const useFuture=!!future.length&&(!current.length||visit.step%2===1),pool=useFuture?future:current;
+ if(!pool.length)return null;
+ const key=JSON.stringify([c.member,c.artist,c.pack,c.days,useFuture,pool]);
  if(visit.key!==key){visit.key=key;visit.pick=Math.floor(Math.random()*pool.length)}
- const r=pool[visit.pick],future=r.day>c.days;
- return {level:'P2',icon:r.icon,title:future?'再守护'+(r.day-c.days)+'天，解锁'+r.title:(c.confirmed?'已解锁':'当前可解锁：')+r.title,target:future?'':r.target};
+ const r=pool[visit.pick];
+ return {level:'产品兜底',icon:r.icon,title:useFuture?'再守护 '+(r.day-c.days)+' 天，解锁 '+r.title:'当前可使用 '+r.title,target:useFuture?'':r.target};
 }
-function resourceSimulator(row){
- const visit={exposed:new Set()};
- $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>进度条下方 · 命中预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="slotResult"></div>'+section('01','模拟用户与停留', 
- '<div class="grid">'+field('会员',select('simMember',['SVIP','VIP','非会员'],row?.member==='VIP'?'VIP':'SVIP'))+field('艺人 ID',input('simArtist','10001'))+
- field('守护天数','<input id="simDays" type="number" min="1" value="26">')+field('关系状态',select('simState',['生效','冻结']))+
- field('人群包',select('simPack',['无','二次元兴趣人群','高活跃守护用户','新开启守护用户'],row?.pack||'无'))+field('北京时间','<input type="datetime-local" id="simTime" value="'+(row?.start||new Date(Date.now()+28800000).toISOString().slice(0,16))+'">')+'</div>'+
- field('权益服务返回的新增内容',select('simNew',['无新增','可用的新物料','可用的新装扮','仅入库','用户不可用']))+
- field('当前阶段权益状态',select('simUnlocked',['已确认解锁','待确认']))+
- '<button id="again">模拟重新进入</button>')+'</div></div></div>';
- function draw(){
-  const c={artist:$('#simArtist').value,days:Number($('#simDays').value),time:$('#simTime').value,member:$('#simMember').value,pack:$('#simPack').value,frozen:$('#simState').value==='冻结',confirmed:$('#simUnlocked').value==='已确认解锁'};
-  const sample=$('#simNew').value,dress=sample==='可用的新装扮';
-  const material=db.assets.find(a=>a.type==='T002'&&a.status==='已上架'&&slotScope(a,c));
-  const catalog=dress?dressCatalog.find(d=>d.status==='已上架'&&slotScope(d,c)&&d.days<=c.days):material;
-  const matching=dress?!!catalog&&c.member!=='非会员':slotCandidates(c).some(r=>r.day<=c.days&&r.title===type('T002').name);
-  const news=sample==='无新增'?[]:[{isNew:true,available:matching&&sample!=='用户不可用',status:sample==='仅入库'?'草稿':catalog?.status,type:dress?catalog?.type:type('T002').name,target:dress?'我的守护装扮':'铁盒里的珍藏'}];
-  const result=resolveSlot(c,news,visit),out=$('#slotResult');
-  out.innerHTML='<h2>进度条下方</h2><hr>'+(!result?'<p class="subtle">隐藏 · 无匹配内容</p>':(result.target?'<button id="slotClick">'+slotLine(result.icon,result.title,result.image)+'</button>':slotLine(result.icon,result.title))+'<p class="hint">'+esc(result.level)+' · '+(result.front?'定位对应模块，新内容前置；物料标签保留。':result.target?'点击前往 '+esc(result.target):'仅说明解锁条件')+'</p>');
-  if(result?.level==='P1'){
-   visit.exposed.add([c.artist,c.member,result.title].join('|'));
-  }
-  out.insertAdjacentHTML('beforeend','<p class="hint">本次模拟停留 · 上新曝光 '+visit.exposed.size+' 条</p>');
-  if($('#slotClick'))$('#slotClick').onclick=()=>toast('预览：'+result.target+(result.front?' · 新内容前置':''));
- }
- $('#again').onclick=()=>{visit.key='';visit.exposed.clear();draw()};$('.drawer-body').oninput=draw;draw();
+
+function resourceSimulator(){
+ const visit={step:0};
+ $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>引导条预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="slotResult"></div><div class="grid">'+field('会员',select('simMember',['SVIP','VIP','非会员'],'SVIP'))+field('艺人 ID',input('simArtist','10001'))+field('守护天数','<input id="simDays" type="number" min="1" value="26">')+field('关系状态',select('simState',['生效','冻结']))+field('人群包',select('simPack',['无','二次元兴趣人群','高活跃守护用户','新开启守护用户'],'无'))+field('北京时间','<input type="datetime-local" id="simTime" value="'+new Date(Date.now()+28800000).toISOString().slice(0,16)+'">')+'</div><button id="again">预览下一条</button></div></div></div>';
+ const draw=()=>{const c={artist:$('#simArtist').value,days:Number($('#simDays').value),time:$('#simTime').value,member:$('#simMember').value,pack:$('#simPack').value,frozen:$('#simState').value==='冻结'};const r=resolveSlot(c,[],visit);$('#slotResult').innerHTML=r?slotLine(r.icon,r.title,r.image)+'<p class="hint" style="margin:12px 0 24px">'+esc(r.level)+' · '+esc(r.target||'仅展示')+'</p>':'<p>暂无匹配权益</p>'};
+ $('#again').onclick=()=>{visit.step++;visit.key='';draw()};$('.drawer-body').oninput=()=>{visit.step=0;visit.key='';draw()};draw();
 }
 
 let selectedAssetType='', selectedAssetGroup='', selectedDisplayCategory='box';
@@ -174,20 +148,21 @@ function materialTypeTabs(){
 }
 function renderResourceStrategies(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='resources'));
- $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 资源位配置</div><div class="heading"><h1>资源位配置</h1><button class="primary right" id="newStrategy">＋ 新增策略</button></div><div class="panel"><table><thead><tr><th>图标</th><th>文案</th><th>链接</th><th>用户人群</th><th>艺人范围</th><th>有效时间</th><th>状态</th><th>操作</th></tr></thead><tbody>${db.resources.map(r=>`<tr><td>${r.image?`<img src="${esc(r.image)}" alt="策略图标" style="width:40px;height:40px;object-fit:contain">`:'—'}</td><td>${esc(r.title)}</td><td>${esc(r.url||'—')}</td><td>${esc(r.aud==='指定人群'?r.pack:r.aud||'全部用户')}</td><td>${esc(artistScopeLabel(r))}</td><td>${esc((r.start||'').replace('T',' '))}<br>至 ${esc((r.end||'').replace('T',' '))}</td><td>${pill(backgroundStatus(r))}</td><td><button class="link" data-strategy-edit="${esc(r.id)}">编辑</button><button class="link" data-strategy-toggle="${esc(r.id)}">${r.status==='已停用'?'启用':'停用'}</button></td></tr>`).join('')||'<tr><td colspan="8">暂无策略</td></tr>'}</tbody></table></div>`;
+ $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 资源位配置</div><div class="heading"><h1>资源位配置</h1><button class="right" onclick="resourceSimulator()">引导条预览</button><button class="primary" id="newStrategy">＋ 新增策略</button></div><p class="hint" style="margin-bottom:16px">运营策略优先；无命中时，先展示当前可用权益，再展示下一阶段可解锁权益，同组按权益类型随机。</p><div class="panel"><table><thead><tr><th>图标</th><th>文案</th><th>跳转</th><th>用户人群</th><th>艺人范围</th><th>有效时间</th><th>状态</th><th>操作</th></tr></thead><tbody>${db.resources.map(r=>`<tr><td>${r.image?`<img src="${esc(r.image)}" alt="策略图标" style="width:40px;height:40px;object-fit:contain">`:'—'}</td><td>${esc(r.title)}</td><td>${esc(strategyTarget(r)||'不跳转')}</td><td>${esc(r.aud==='指定人群'?r.pack:r.aud||'全部用户')}</td><td>${esc(artistScopeLabel(r))}</td><td>${esc((r.start||'').replace('T',' '))}<br>至 ${esc((r.end||'').replace('T',' '))}</td><td>${pill(backgroundStatus(r))}</td><td><button class="link" data-strategy-edit="${esc(r.id)}">编辑</button><button class="link" data-strategy-toggle="${esc(r.id)}">${r.status==='已停用'?'启用':'停用'}</button></td></tr>`).join('')||'<tr><td colspan="8">暂无策略</td></tr>'}</tbody></table></div>`;
  $('#newStrategy').onclick=()=>resourceStrategyEditor();
  document.querySelectorAll('[data-strategy-edit]').forEach(b=>b.onclick=()=>resourceStrategyEditor(b.dataset.strategyEdit));
  document.querySelectorAll('[data-strategy-toggle]').forEach(b=>b.onclick=()=>{const r=db.resources.find(r=>r.id===b.dataset.strategyToggle);if(r.status==='已停用'){if(Date.parse(r.end+'+08:00')<=Date.now()){toast('策略已到期，请先编辑有效时间');return}r.status='生效中'}else r.status='已停用';renderResourceStrategies()});
 }
 function resourceStrategyEditor(id){
  const r=db.resources.find(r=>r.id===id)||{};let icon=r.image||'',loading=false;
- $('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="策略配置"><div class="drawer-head"><h2>${id?'编辑策略':'新增策略'}</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="strategyErrors" role="alert"></div>${field('图标','<input id="strategyIcon" aria-label="图标" type="file" accept="image/png,image/jpeg,image/webp"><div id="strategyIconPreview" style="margin-top:12px"></div>')}${field('文案','<input id="strategyText" aria-label="文案" value="'+esc(r.title||'')+'">')}${field('链接（选填）','<input id="strategyLink" aria-label="链接（选填）" placeholder="https://" value="'+esc(r.url||'')+'">','',false)}${field('用户人群',select('aud',['全部用户','指定人群'],r.aud||'全部用户'))}<div id="packWrap">${field('人群包',select('pack',['二次元兴趣人群','高活跃守护用户','新开启守护用户'],r.pack||'二次元兴趣人群'))}</div>${field('艺人范围',select('artistMode',['全部艺人','艺人圈选'],r.artistMode||'全部艺人'))}<div id="artistWrap">${field('艺人 ID',input('artistId',r.artistId||''))}</div>${field('有效时间','<div class="grid"><input aria-label="开始时间" id="strategyStart" type="datetime-local" value="'+esc(r.start||'')+'"><input aria-label="结束时间" id="strategyEnd" type="datetime-local" value="'+esc(r.end||'')+'"></div>')}</div><div class="drawer-foot"><button class="right" onclick="closeModal()">取消</button><button class="primary" id="saveStrategy">保存策略</button></div></div></div>`;
+ $('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="策略配置"><div class="drawer-head"><h2>${id?'编辑策略':'新增策略'}</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="strategyErrors" role="alert"></div>${field('图标','<input id="strategyIcon" aria-label="图标" type="file" accept="image/png,image/jpeg,image/webp"><div id="strategyIconPreview" style="margin-top:12px"></div>')}${field('文案','<input id="strategyText" aria-label="文案" value="'+esc(r.title||'')+'">')}${field('跳转（选填）',select('strategyAction',['仅展示','链接跳转','守护页铁盒模块','守护页装扮模块'],r.action|| (r.url?'链接跳转':'仅展示')),'',false)}<div id="strategyUrlWrap">${field('链接','<input id="strategyLink" aria-label="链接" placeholder="https://" value="'+esc(r.url||'')+'">')}</div><div id="strategyGuardWrap">${field('目标守护页艺人 ID','<input id="strategyGuardArtist" aria-label="目标守护页艺人 ID" placeholder="填写目标艺人 ID" value="'+esc(r.guardArtistId||'')+'">')}</div>${field('用户人群',select('aud',['全部用户','指定人群'],r.aud||'全部用户'))}<div id="packWrap">${field('人群包',select('pack',['二次元兴趣人群','高活跃守护用户','新开启守护用户'],r.pack||'二次元兴趣人群'))}</div>${field('艺人范围',select('artistMode',['全部艺人','艺人圈选'],r.artistMode||'全部艺人'))}<div id="artistWrap">${field('艺人 ID',input('artistId',r.artistId||''))}</div>${field('有效时间','<div class="grid"><input aria-label="开始时间" id="strategyStart" type="datetime-local" value="'+esc(r.start||'')+'"><input aria-label="结束时间" id="strategyEnd" type="datetime-local" value="'+esc(r.end||'')+'"></div>')}</div><div class="drawer-foot"><button class="right" onclick="closeModal()">取消</button><button class="primary" id="saveStrategy">保存策略</button></div></div></div>`;
+ const syncTarget=()=>{const v=$('#strategyAction').value;$('#strategyUrlWrap').hidden=v!=='链接跳转';$('#strategyGuardWrap').hidden=!['守护页铁盒模块','守护页装扮模块'].includes(v)};$('#strategyAction').onchange=syncTarget;syncTarget();
  bindAudienceScope();const preview=()=>$('#strategyIconPreview').innerHTML=icon?`<img src="${esc(icon)}" alt="已选图标" style="width:64px;height:64px;object-fit:contain">`:'';preview();
  $('#strategyIcon').onchange=e=>{const f=e.target.files[0];if(!f)return;if(!['image/png','image/jpeg','image/webp'].includes(f.type)||f.size>5*1024*1024){$('#strategyErrors').textContent='请选择 5 MB 以内的 PNG、JPG 或 WebP 图片';return}loading=true;$('#saveStrategy').disabled=true;const reader=new FileReader();const end=()=>{loading=false;if($('#saveStrategy'))$('#saveStrategy').disabled=false};reader.onerror=()=>{end();if($('#strategyErrors'))$('#strategyErrors').textContent='图片读取失败'};reader.onload=()=>{const img=new Image();img.onerror=()=>{end();if($('#strategyErrors'))$('#strategyErrors').textContent='图片无效'};img.onload=()=>{end();icon=reader.result;if($('#strategyIconPreview'))preview()};img.src=reader.result};reader.readAsDataURL(f)};
- $('#saveStrategy').onclick=()=>{if(loading)return;const title=$('#strategyText').value.trim(),url=$('#strategyLink').value.trim(),start=$('#strategyStart').value,end=$('#strategyEnd').value,aud=$('#aud').value,pack=aud==='指定人群'?$('#pack').value:'',artist=artistScopeValues(),errors=[];
- if(!icon)errors.push('请上传图标');if(!title)errors.push('请填写文案');if(url){try{const u=new URL(url);if(!['https:','http:'].includes(u.protocol))throw Error()}catch{errors.push('请填写有效的 HTTP / HTTPS 链接')}}validateArtistScope(artist,errors);validateRange({start,end},errors);
+ $('#saveStrategy').onclick=()=>{if(loading)return;const action=$('#strategyAction').value,guardArtistId=action.startsWith('守护页')?$('#strategyGuardArtist').value.trim():'',title=$('#strategyText').value.trim(),url=action==='链接跳转'?$('#strategyLink').value.trim():'',start=$('#strategyStart').value,end=$('#strategyEnd').value,aud=$('#aud').value,pack=aud==='指定人群'?$('#pack').value:'',artist=artistScopeValues(),errors=[];
+ if(!icon)errors.push('请上传图标');if(!title)errors.push('请填写文案');if(action==='链接跳转'&&!url)errors.push('请填写跳转链接');if(action.startsWith('守护页')&&!/^[1-9]\d*$/.test(guardArtistId))errors.push('请填写目标守护页的有效艺人 ID');if(url){try{const u=new URL(url);if(!['https:','http:'].includes(u.protocol))throw Error()}catch{errors.push('请填写有效的 HTTP / HTTPS 链接')}}validateArtistScope(artist,errors);validateRange({start,end},errors);
  if(errors.length){$('#strategyErrors').innerHTML='<div class="error">'+errors.map(esc).join('<br>')+'</div>';$('.drawer-body').scrollTop=0;return}
- const next={...r,id:id||'R'+Date.now(),image:icon,title,name:title,url,aud,pack,...artist,start,end,action:url?'链接跳转':'仅展示',target:'',member:'不限',priority:0,publishedAt:Date.now(),status:r.status==='已停用'?'已停用':Date.parse(start+'+08:00')>Date.now()?'待生效':'生效中'};
+ const next={...r,id:id||'R'+Date.now(),image:icon,title,name:title,url,aud,pack,...artist,start,end,action,guardArtistId,target:action.startsWith('守护页')?action:'',member:'不限',priority:0,publishedAt:Date.now(),status:r.status==='已停用'?'已停用':Date.parse(start+'+08:00')>Date.now()?'待生效':'生效中'};
  const i=db.resources.findIndex(r=>r.id===id);if(i<0)db.resources.push(next);else db.resources[i]=next;closeModal();renderResourceStrategies();toast('策略已保存');};
 }
 
