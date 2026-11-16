@@ -12,7 +12,7 @@ const rules=stages.flatMap(n=>[{id:'COMMON_D'+n.days,name:n.label+' · 共同外
 let db={types:[{id:'T001',name:'贴纸',template:'平面贴纸',rule:'',status:'草稿'},{id:'T002',name:'拍立得',template:'相片边框',rule:'',status:'草稿'}],assets:[{id:'M001',name:'星愿贴纸',type:'T001',status:'草稿'},{id:'M002',name:'夏日手记',type:'T002',status:'草稿'}],deliveries:[{id:'D001',name:'二次元艺人物料上新',type:'T001',mode:'整个类型',assets:[],aud:'指定人群',pack:'二次元兴趣人群',start:'2026-11-01T00:00',end:'2026-11-30T23:59',status:'草稿'}],resources:[{id:'R001',name:'守护惊喜日 · 本期限量物料',tag:'守护惊喜日 · 本期限定',title:'给喜欢换个新样子',sub:'领取拍立得主题边框',button:'去领取',url:'https://example.com/guard/reward',start:'2026-11-01T00:00',end:'2026-11-07T23:59',priority:10,aud:'全部用户',status:'待生效'}]};
 let page='materials',tab='types',query='',editing=null,upload='',uploadName='';
 function typeGate(t){return {...rule(t.rule),member:t.memberThreshold==='VIP'?'VIP / SVIP':'SVIP'}}
-function rule(id){return rules.find(r=>r.id===id)||{id:'',name:'待关联成长节点',member:'待关联',days:'—',scope:''}}function type(id){return db.types.find(t=>t.id===id)||db.types[0]}function pill(s){return `<span class="badge ${s==='已上架'||s==='生效中'?'green':s==='草稿'||s==='已停用'?'gray':'gold'}">${esc(s)}</span>`}function toast(s){$('#toast').innerHTML=`<div class="toast">${esc(s)}</div>`;setTimeout(()=>$('#toast').innerHTML='',2600)}function closeModal(){$('#modal').innerHTML=''}
+function rule(id){return rules.find(r=>r.id===id)||{id:'',name:'待关联成长节点',member:'待关联',days:'—',scope:''}}function type(id){return db.types.find(t=>t.id===id)||db.types[0]}function pill(s){return `<span class="badge ${s==='已上架'||s==='生效中'?'green':s==='草稿'||s==='已停用'?'gray':'gold'}">${esc(s)}</span>`}function toast(s){$('#toast').innerHTML=`<div class="toast">${esc(s)}</div>`;setTimeout(()=>$('#toast').innerHTML='',2600)}function closeModal(){stopSlotPreview();$('#modal').innerHTML=''}
 const titles={materials:['权益类型与素材管理','维护权益类型和素材资源，开放方式在成长权益或运营策略中配置。'],delivery:['日常运营权益','选择铁盒物料或引用现有装扮 ID，配置投放范围、排期与权益标。'],resources:['资源位配置','配置进度条下方的单条提示，预览不同用户的命中结果。']};
 const defaultNewArt='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="24" fill="#343025"/><rect x="31" y="35" width="66" height="85" rx="7" fill="#8d7856" transform="rotate(-12 64 78)"/><rect x="57" y="39" width="65" height="87" rx="7" fill="#e5d1a8" transform="rotate(10 90 82)"/><path d="m89 60 5 13 14 1-11 9 3 14-11-8-12 8 4-14-11-9 14-1z" fill="#8d7856"/></svg>`);
 let autoNewArt='';let autoNewEnabled=true;
@@ -51,40 +51,98 @@ function slotScope(r,c){
  const t=r.type&&db.types.find(t=>t.id===r.type);if(t&&c.member!=='SVIP'&&!(c.member==='VIP'&&t.memberThreshold==='VIP'))return false;
  return artistScopeMatches(r,c.artist)&&(r.aud!=='指定人群'||r.pack===c.pack)&&(!r.member||r.member==='不限'||r.member.split(' / ').includes(c.member));
 }
-function slotCandidates(c){
- const rewards=[];
- for(const g of dressGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c)))
-  for(const d of dressLookup(g.dressIds).filter(d=>d.status==='已上架'&&slotScope(d,c)))rewards.push({key:'dress-'+d.type,day:g.days,title:d.type,icon:d.icon||'◇',target:'我的守护装扮'});
- if(c.member==='VIP'||c.member==='SVIP'){
-  for(const g of Object.values(db.growth).filter(g=>g.status==='已发布'&&slotScope(g,c))){
-   const t=db.types.find(t=>t.id===g.type&&t.status==='已上架');
-   if(t&&g.assets.some(id=>db.assets.some(a=>a.id===id&&a.status==='已上架'&&slotScope(a,c))))rewards.push({key:t.id,day:rule(g.rule).days,title:t.name,icon:'▧',target:'我的守护铁盒'});
-  }
-  for(const g of numericGrowth.filter(g=>g.status==='已发布'&&slotScope(g,c)&&type(g.type).status==='已上架'))rewards.push({key:g.type,day:g.days,title:type(g.type).name,icon:'▣',target:'我的守护铁盒'});
- }
- return rewards;
-}
+function slotCandidates(c){return configuredDisplayBenefits(c)}
 function strategyTarget(r){return r.action==='守护页铁盒模块'||r.action==='守护页装扮模块'?'当前'+r.action:r.action==='仅展示'?'':r.url||''}
 function resolveSlot(c,news,visit){
- if(c.frozen)return {level:'关系提示',icon:'Ⅱ',title:'守护已暂停，查看恢复方式',target:'守护关系管理'};
+ if(c.frozen){delete visit.signature;return {level:'关系提示',icon:'Ⅱ',title:'守护已暂停，查看恢复方式',target:'守护关系管理'}};
  const operator=db.resources.filter(r=>!['草稿','已停用'].includes(r.status)&&artistScopeMatches(r,c.artist)&&(r.aud!=='指定人群'||r.pack===c.pack)&&r.start<=c.time&&c.time<r.end).sort((a,b)=>(b.publishedAt||0)-(a.publishedAt||0))[0];
- if(operator)return {level:'运营策略',title:operator.title,image:operator.image,icon:'✦',target:strategyTarget(operator)};
+ if(operator){delete visit.signature;return {level:'运营策略',title:operator.title,image:operator.image,icon:'✦',target:strategyTarget(operator)}};
  const next=stages.find(s=>s.days>c.days),all=slotCandidates(c);
- const unique=rows=>[...new Map(rows.map(r=>[r.key,r])).values()];
- const current=unique(all.filter(r=>r.day<=c.days)),future=unique(all.filter(r=>r.day===next?.days));
- const useFuture=!!future.length&&(!current.length||visit.step%2===1),pool=useFuture?future:current;
- if(!pool.length)return null;
- const key=JSON.stringify([c.member,c.artist,c.pack,c.days,useFuture,pool]);
- if(visit.key!==key){visit.key=key;visit.pick=Math.floor(Math.random()*pool.length)}
- const r=pool[visit.pick];
- return {level:'产品兜底',icon:r.icon,title:useFuture?'再守护 '+(r.day-c.days)+' 天，解锁 '+r.title:'当前可使用 '+r.title,target:useFuture?'':r.target};
+ const current=all.filter(r=>r.day<=c.days),future=all.filter(r=>r.day===next?.days),r=nextFallback(current,future,visit);
+ if(!r)return null;
+ return {level:'产品兜底',icon:r.icon,image:r.image,title:r.future?'再守护'+(r.day-c.days)+'天，解锁'+r.title:'已解锁专属'+r.title,target:'',round:visit.round};
 }
 
 function resourceSimulator(){
- const visit={step:0};
- $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>引导条预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="slotResult"></div><div class="grid">'+field('会员',select('simMember',['SVIP','VIP','非会员'],'SVIP'))+field('艺人 ID',input('simArtist','10001'))+field('守护天数','<input id="simDays" type="number" min="1" value="26">')+field('关系状态',select('simState',['生效','冻结']))+field('人群包',select('simPack',['无','二次元兴趣人群','高活跃守护用户','新开启守护用户'],'无'))+field('北京时间','<input type="datetime-local" id="simTime" value="'+new Date(Date.now()+28800000).toISOString().slice(0,16)+'">')+'</div><button id="again">预览下一条</button></div></div></div>';
- const draw=()=>{const c={artist:$('#simArtist').value,days:Number($('#simDays').value),time:$('#simTime').value,member:$('#simMember').value,pack:$('#simPack').value,frozen:$('#simState').value==='冻结'};const r=resolveSlot(c,[],visit);$('#slotResult').innerHTML=r?slotLine(r.icon,r.title,r.image)+'<p class="hint" style="margin:12px 0 24px">'+esc(r.level)+' · '+esc(r.target||'仅展示')+'</p>':'<p>暂无匹配权益</p>'};
- $('#again').onclick=()=>{visit.step++;visit.key='';draw()};$('.drawer-body').oninput=()=>{visit.step=0;visit.key='';draw()};draw();
+ stopSlotPreview();let visit={};
+ $('#modal').innerHTML='<div class="overlay"><div class="drawer" role="dialog" aria-label="引导条预览"><div class="drawer-head"><h2>引导条预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="slotResult" style="min-height:90px"></div><div class="grid">'+field('会员',select('simMember',['SVIP','VIP','非会员'],displayMember||'SVIP'))+field('艺人 ID',input('simArtist','10001'))+field('守护天数','<input id="simDays" aria-label="守护天数" type="number" min="0" value="26">')+field('关系状态',select('simState',['生效','冻结']))+field('人群包',select('simPack',['无','二次元兴趣人群','高活跃守护用户','新开启守护用户'],'无'))+field('北京时间','<input type="datetime-local" id="simTime" aria-label="北京时间" value="'+new Date(Date.now()+28800000).toISOString().slice(0,16)+'">')+'</div><p class="hint">每条 4 秒；每轮先已解锁、再下一阶段，每类最多 2 条，下一轮接续。</p><div style="display:flex;gap:12px;margin-top:16px"><button id="again">预览下一条</button><button id="restartSlot">模拟重新进入</button><button id="pauseSlot">暂停轮播</button></div></div></div></div>';
+ const draw=()=>{if(!$('#slotResult')){stopSlotPreview();return}const c={artist:$('#simArtist').value,days:Math.max(0,Number($('#simDays').value)||0),time:$('#simTime').value,member:$('#simMember').value,pack:$('#simPack').value,frozen:$('#simState').value==='冻结'};const r=resolveSlot(c,[],visit);$('#slotResult').innerHTML=r?slotLine(r.icon,r.title,r.image)+(r.target?' <button id="previewSlotTarget" aria-label="预览跳转">›</button>':'')+'<p class="hint" style="margin:12px 0 24px">'+esc(r.level)+' · '+esc(r.target||'仅展示，无跳转')+(r.round?' · 第 '+r.round+' 轮':'')+'</p>':'<p class="hint">引导条隐藏 · 无匹配权益</p>';if($('#previewSlotTarget'))$('#previewSlotTarget').onclick=()=>toast('预览跳转：'+r.target)};
+ const start=()=>{stopSlotPreview();slotPreviewTimer=setInterval(draw,4000)};
+ const reset=()=>{visit={};draw();if($('#pauseSlot').textContent==='暂停轮播')start()};
+ $('#again').onclick=()=>{draw();if(slotPreviewTimer!==null)start()};$('#restartSlot').onclick=reset;$('#pauseSlot').onclick=()=>{if(slotPreviewTimer!==null){stopSlotPreview();$('#pauseSlot').textContent='继续轮播'}else{start();$('#pauseSlot').textContent='暂停轮播'}};$('.drawer-body').oninput=reset;draw();start();
+}
+let growthTab='association',displayMember='VIP',displayDay='all',displayRows=[],slotPreviewTimer=null;
+function growthTabs(){return '<div class="tabs" style="margin-bottom:20px"><button class="'+(growthTab==='association'?'active':'')+'" onclick="growthTab=\'association\';renderGrowth()">关联配置</button><button class="'+(growthTab==='display'?'active':'')+'" onclick="growthTab=\'display\';renderGrowth()">C 端展示配置</button></div>'}
+// Sources identify the node and benefit type, not the mutable record IDs.
+function displaySources(member,context){
+ const c=context||{member},out=new Map();
+ const matches=r=>context?slotScope(r,c):(!r.member||r.member==='不限'||r.member.split(' / ').includes(member));
+ const typeOK=t=>t&&t.status==='已上架'&&(member==='SVIP'||member==='VIP'&&t.memberThreshold==='VIP');
+ const add=r=>{if(!out.has(r.key))out.set(r.key,r)};
+ for(const g of Object.values(db.growth).filter(g=>g.status==='已发布'&&matches(g))){
+  const t=db.types.find(t=>t.id===g.type);if(!typeOK(t))continue;
+  const assets=g.assets.map(id=>db.assets.find(a=>a.id===id&&a.status==='已上架'&&matches(a))).filter(Boolean);if(!assets.length)continue;
+  const day=rule(g.rule).days;
+  add({key:'material:'+t.id+':'+day,day,name:t.category==='box'?assets.map(a=>a.name).join('、'):t.name,group:t.category==='box'?'铁盒造型':t.name,source:t.name,icon:'▧',image:t.exampleImage||''});
+ }
+ for(const g of dressGrowth.filter(g=>g.status==='已发布'&&matches(g)))for(const d of dressLookup(g.dressIds).filter(d=>d.status==='已上架'&&matches(d))){
+  add({key:'dress:'+d.type+':'+g.days,day:g.days,name:d.name,group:'装扮权益',source:d.type,icon:d.icon||'◇',image:''});
+ }
+ for(const g of numericGrowth.filter(g=>g.status==='已发布'&&matches(g))){const t=db.types.find(t=>t.id===g.type);if(typeOK(t))add({key:'number:'+t.id+':'+g.days,day:g.days,name:t.name+'（共'+g.value+'个）',group:t.name,source:t.name,icon:'▣',image:''})}
+ return [...out.values()].sort((a,b)=>a.day-b.day);
+}
+function seedDisplayRows(){
+ displayRows=['VIP','SVIP'].flatMap(member=>displaySources(member).map((s,i)=>({id:member+'-'+i,member,day:s.day,sourceKey:s.key,name:s.name.replace(/^专属/,''),group:s.group,order:(i+1)*10,enabled:true})));
+}
+function orderedDisplayRows(member){return displayRows.filter(r=>r.member===member).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id))}
+function configuredDisplayBenefits(c){
+ const sources=new Map(displaySources(c.member,c).map(s=>[s.key,s]));
+ return orderedDisplayRows(c.member).filter(r=>r.enabled&&sources.has(r.sourceKey)&&sources.get(r.sourceKey).day===r.day).map(r=>({...sources.get(r.sourceKey),...r,title:r.name,icon:sources.get(r.sourceKey).icon,target:''}));
+}
+function renderDisplayConfiguration(){
+ const sources=new Map(displaySources(displayMember).map(s=>[s.key,s]));
+ const rows=orderedDisplayRows(displayMember).filter(r=>displayDay==='all'||r.day===Number(displayDay));
+ $('#main').innerHTML='<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1><button class="right" onclick="displayFloatPreview()">浮层预览</button><button onclick="resourceSimulator()">引导条预览</button><button class="primary" onclick="displayBenefitEditor()">＋ 新增展示权益</button></div>'+growthTabs()+'<p class="hint" style="margin-bottom:16px">权益名称同时用于等级浮层和产品兜底引导条；各会员身份分别配置。</p><div class="panel"><div class="toolbar"><label>会员身份 <select id="displayMember" aria-label="展示会员身份">'+['VIP','SVIP'].map(m=>'<option '+(m===displayMember?'selected':'')+'>'+m+'</option>').join('')+'</select></label><label>成长节点 <select id="displayDay" aria-label="展示成长节点"><option value="all">全部节点</option>'+stages.map(n=>'<option value="'+n.days+'" '+(String(n.days)===displayDay?'selected':'')+'>'+n.label+'</option>').join('')+'</select></label></div><table><thead><tr><th>顺序</th><th>成长节点</th><th>浮层分组</th><th>对外权益名称</th><th>关联权益</th><th>状态</th><th>操作</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+r.order+'</td><td>D'+r.day+'</td><td>'+esc(r.group)+'</td><td>'+esc(r.name)+'</td><td>'+esc(sources.get(r.sourceKey)?.source||'关联已失效')+'</td><td>'+pill(!sources.has(r.sourceKey)?'关联失效':r.enabled?'生效中':'已停用')+'</td><td><button class="link" data-display-edit="'+esc(r.id)+'">编辑</button><button class="link" data-display-toggle="'+esc(r.id)+'">'+(r.enabled?'停用':'启用')+'</button><button class="link" data-display-delete="'+esc(r.id)+'">删除</button></td></tr>').join('')+'</tbody></table>'+(rows.length?'':'<p class="empty">暂无展示权益，可点击新增。</p>')+'</div>';
+ $('#displayMember').onchange=e=>{displayMember=e.target.value;renderDisplayConfiguration()};$('#displayDay').onchange=e=>{displayDay=e.target.value;renderDisplayConfiguration()};
+ document.querySelectorAll('[data-display-edit]').forEach(b=>b.onclick=()=>displayBenefitEditor(b.dataset.displayEdit));
+ document.querySelectorAll('[data-display-toggle]').forEach(b=>b.onclick=()=>{const r=displayRows.find(r=>r.id===b.dataset.displayToggle);if(!r.enabled&&!sources.has(r.sourceKey)){toast('请先修复关联权益');return}r.enabled=!r.enabled;renderDisplayConfiguration()});
+ document.querySelectorAll('[data-display-delete]').forEach(b=>b.onclick=()=>{displayRows=displayRows.filter(r=>r.id!==b.dataset.displayDelete);renderDisplayConfiguration();toast('已删除展示项，关联权益不变')});
+}
+function displayBenefitEditor(id){
+ const old=displayRows.find(r=>r.id===id),r=old||{member:displayMember,day:displayDay==='all'?1:Number(displayDay),order:Math.max(0,...orderedDisplayRows(displayMember).map(r=>r.order))+10};
+ $('#modal').innerHTML='<div class="overlay"><div class="drawer" role="dialog" aria-label="展示权益配置"><div class="drawer-head"><h2>'+ (id?'编辑':'新增')+'展示权益</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div id="displayErrors" role="alert"></div>'+field('会员身份',select('benefitMember',['VIP','SVIP'],r.member))+field('成长节点',select('benefitDay',stages.map(n=>[String(n.days),n.label]),String(r.day)))+field('关联权益','<select id="benefitSourceKey" aria-label="关联权益"></select>','选择本节点已发布的关联权益，用于校验实际可用范围。')+field('浮层分组',input('benefitGroup',r.group||'','例如：铁盒造型、铁盒名额、装扮权益'))+field('对外权益名称',input('benefitName',r.name||'','例如：皮肤、拍立得、耳机套'),'仅填写名称，无需填写“已解锁专属”或“再守护”等前缀。')+'<div id="benefitCopyPreview" class="notice"></div>'+field('显示顺序','<input id="benefitOrder" aria-label="显示顺序" type="number" min="1" step="1" value="'+r.order+'">','同一会员下按数字从小到大展示。')+'<label><input type="checkbox" id="benefitEnabled" '+(r.enabled===false?'':'checked')+'> 启用展示</label></div><div class="drawer-foot"><button class="right" onclick="closeModal()">取消</button><button class="primary" id="saveDisplayBenefit">保存展示配置</button></div></div></div>';
+ const previewCopy=()=>{const name=$('#benefitName').value.trim()||'{权益名称}';$('#benefitCopyPreview').innerHTML='<div>已解锁专属'+esc(name)+'</div><div>再守护{N}天，解锁'+esc(name)+'</div>'};$('#benefitName').oninput=previewCopy;previewCopy();
+ const refresh=()=>{const sources=displaySources($('#benefitMember').value).filter(s=>s.day===Number($('#benefitDay').value));$('#benefitSourceKey').innerHTML='<option value="">请选择关联权益</option>'+sources.map(s=>'<option value="'+esc(s.key)+'" '+(s.key===r.sourceKey?'selected':'')+'>'+esc(s.source)+' · '+esc(s.name)+'</option>').join('')};
+ $('#benefitMember').onchange=refresh;$('#benefitDay').onchange=refresh;refresh();
+ $('#benefitSourceKey').onchange=()=>{const s=displaySources($('#benefitMember').value).find(s=>s.key===$('#benefitSourceKey').value);if(!s)return;if(!$('#benefitName').value)$('#benefitName').value=s.name;if(!$('#benefitGroup').value)$('#benefitGroup').value=s.group;previewCopy()};
+ $('#saveDisplayBenefit').onclick=()=>{
+  const next={id:id||'display-'+crypto.randomUUID(),member:$('#benefitMember').value,day:Number($('#benefitDay').value),sourceKey:$('#benefitSourceKey').value,name:$('#benefitName').value.trim(),group:$('#benefitGroup').value.trim(),order:Number($('#benefitOrder').value),enabled:$('#benefitEnabled').checked},errors=[];
+  if(!displaySources(next.member).some(s=>s.key===next.sourceKey&&s.day===next.day))errors.push('请选择当前身份与节点下有效的关联权益。');
+  if(!next.name||!next.group)errors.push('请填写浮层分组和权益名称。');if(!Number.isSafeInteger(next.order)||next.order<1)errors.push('显示顺序须为正整数。');
+  if(displayRows.some(x=>x.id!==id&&x.member===next.member&&x.sourceKey===next.sourceKey))errors.push('此身份下该节点权益已有展示配置，请编辑原记录。');
+  if(displayRows.some(x=>x.id!==id&&x.member===next.member&&x.order===next.order))errors.push('该会员下显示顺序已使用，请填写其他数字。');
+  if(errors.length){$('#displayErrors').innerHTML='<div class="error">'+errors.map(esc).join('<br>')+'</div>';return}
+  if(old)displayRows[displayRows.indexOf(old)]=next;else displayRows.push(next);displayMember=next.member;closeModal();renderDisplayConfiguration();toast('展示配置已保存（本地演示）');
+ };
+}
+function displayFloatPreview(){
+ $('#modal').innerHTML='<div class="overlay"><div class="drawer" style="width:min(1050px,95vw)" role="dialog" aria-label="等级权益浮层预览"><div class="drawer-head"><h2>等级权益浮层预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div class="grid">'+field('会员身份',select('floatMember',['VIP','SVIP'],displayMember))+field('有效守护天数','<input id="floatDays" aria-label="有效守护天数" type="number" min="0" value="26">')+field('当前艺人 ID',input('floatArtist','10001'))+field('用户人群',select('floatPack',['无','二次元兴趣人群','高活跃守护用户','新开启守护用户'],'无'))+'</div><div id="floatTable"></div></div></div></div>';
+ const draw=()=>{const c={member:$('#floatMember').value,days:Number($('#floatDays').value),artist:$('#floatArtist').value,pack:$('#floatPack').value},rows=configuredDisplayBenefits(c),groups=[...new Set(rows.map(r=>r.group))],current=stages.filter(s=>s.days<=c.days).at(-1);$('#floatTable').innerHTML='<h2>'+esc(c.member)+' 守护等级权益</h2><div class="panel" style="overflow:auto"><table><thead><tr><th>守护等级</th>'+groups.map(g=>'<th>'+esc(g)+'</th>').join('')+'</tr></thead><tbody>'+stages.map(n=>'<tr '+(n.days===current?.days?'style="background:#edf1ff"':'')+'><td>'+esc(n.label)+(n.days===current?.days?' · 当前':'')+'</td>'+groups.map(g=>'<td>'+ (rows.filter(r=>r.day===n.days&&r.group===g).map(r=>esc(r.name)).join('、')||'—')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'};$('.drawer-body').oninput=draw;draw();
+}
+function stopSlotPreview(){if(slotPreviewTimer!==null){clearInterval(slotPreviewTimer);slotPreviewTimer=null}}
+// Each category has its own cursor; a round consumes at most two entries per category.
+function nextFallback(current,future,visit){
+ const signature=JSON.stringify([current,future]);
+ if(visit.signature!==signature){visit.signature=signature;visit.currentCursor=0;visit.futureCursor=0;visit.queue=[];visit.index=0;visit.round=0}
+ if(current.length+future.length===1){visit.round=1;return current.length?{...current[0],future:false}:{...future[0],future:true}}
+ if(!visit.queue.length||visit.index>=visit.queue.length){
+  visit.queue=[];visit.index=0;visit.round++;
+  for(const [rows,key,isFuture] of [[current,'currentCursor',false],[future,'futureCursor',true]]){
+   for(let i=0;i<Math.min(2,rows.length);i++)visit.queue.push({...rows[(visit[key]+i)%rows.length],future:isFuture});
+   if(rows.length)visit[key]=(visit[key]+Math.min(2,rows.length))%rows.length;
+  }
+ }
+ return visit.queue[visit.index++]||null;
 }
 
 let selectedAssetType='', selectedAssetGroup='', selectedDisplayCategory='box';
@@ -148,7 +206,7 @@ function materialTypeTabs(){
 }
 function renderResourceStrategies(){
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='resources'));
- $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 资源位配置</div><div class="heading"><h1>资源位配置</h1><button class="right" onclick="resourceSimulator()">引导条预览</button><button class="primary" id="newStrategy">＋ 新增策略</button></div><p class="hint" style="margin-bottom:16px">运营策略优先；无命中时，先展示当前可用权益，再展示下一阶段可解锁权益，同组按权益类型随机。</p><div class="panel"><table><thead><tr><th>图标</th><th>文案</th><th>跳转</th><th>用户人群</th><th>艺人范围</th><th>有效时间</th><th>状态</th><th>操作</th></tr></thead><tbody>${db.resources.map(r=>`<tr><td>${r.image?`<img src="${esc(r.image)}" alt="策略图标" style="width:40px;height:40px;object-fit:contain">`:'—'}</td><td>${esc(r.title)}</td><td>${esc(strategyTarget(r)||'不跳转')}</td><td>${esc(r.aud==='指定人群'?r.pack:r.aud||'全部用户')}</td><td>${esc(artistScopeLabel(r))}</td><td>${esc((r.start||'').replace('T',' '))}<br>至 ${esc((r.end||'').replace('T',' '))}</td><td>${pill(backgroundStatus(r))}</td><td><button class="link" data-strategy-edit="${esc(r.id)}">编辑</button><button class="link" data-strategy-toggle="${esc(r.id)}">${r.status==='已停用'?'启用':'停用'}</button></td></tr>`).join('')||'<tr><td colspan="8">暂无策略</td></tr>'}</tbody></table></div>`;
+ $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 资源位配置</div><div class="heading"><h1>资源位配置</h1><button class="right" onclick="resourceSimulator()">引导条预览</button><button class="primary" id="newStrategy">＋ 新增策略</button></div><p class="hint" style="margin-bottom:16px">运营策略优先；兜底使用 C 端展示配置，每条 4 秒，每轮先已解锁、后下一阶段，每类最多 2 条。</p><div class="panel"><table><thead><tr><th>图标</th><th>文案</th><th>跳转</th><th>用户人群</th><th>艺人范围</th><th>有效时间</th><th>状态</th><th>操作</th></tr></thead><tbody>${db.resources.map(r=>`<tr><td>${r.image?`<img src="${esc(r.image)}" alt="策略图标" style="width:40px;height:40px;object-fit:contain">`:'—'}</td><td>${esc(r.title)}</td><td>${esc(strategyTarget(r)||'不跳转')}</td><td>${esc(r.aud==='指定人群'?r.pack:r.aud||'全部用户')}</td><td>${esc(artistScopeLabel(r))}</td><td>${esc((r.start||'').replace('T',' '))}<br>至 ${esc((r.end||'').replace('T',' '))}</td><td>${pill(backgroundStatus(r))}</td><td><button class="link" data-strategy-edit="${esc(r.id)}">编辑</button><button class="link" data-strategy-toggle="${esc(r.id)}">${r.status==='已停用'?'启用':'停用'}</button></td></tr>`).join('')||'<tr><td colspan="8">暂无策略</td></tr>'}</tbody></table></div>`;
  $('#newStrategy').onclick=()=>resourceStrategyEditor();
  document.querySelectorAll('[data-strategy-edit]').forEach(b=>b.onclick=()=>resourceStrategyEditor(b.dataset.strategyEdit));
  document.querySelectorAll('[data-strategy-toggle]').forEach(b=>b.onclick=()=>{const r=db.resources.find(r=>r.id===b.dataset.strategyToggle);if(r.status==='已停用'){if(Date.parse(r.end+'+08:00')<=Date.now()){toast('策略已到期，请先编辑有效时间');return}r.status='生效中'}else r.status='已停用';renderResourceStrategies()});
@@ -244,6 +302,7 @@ db.resources[0]={...db.resources[0],action:'链接跳转',member:'SVIP',publishe
 
 
 function renderGrowth(){
+ if(growthTab==='display'){renderDisplayConfiguration();return}
  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='growth'));
  const entry=(id,name)=>`<button class="link" data-growth-id="${esc(id)}">${esc(name)}</button>`;
  const exclusiveDress=dressGrowth.some(g=>g.member==='SVIP');
@@ -258,7 +317,7 @@ function renderGrowth(){
   row.push(`<button class="link" data-growth-day="${n.days}">配置此节点</button>`);
   return '<tr>'+row.map(v=>'<td>'+v+'</td>').join('')+'</tr>';
  }).join('');
- $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1><button class="primary right" onclick="growthEditor()">＋ 配置成长权益</button></div><div class="panel" style="overflow:auto"><div id="growthContent"><table><thead><tr><th>守护节点</th>${tinHeaders.map(h=>'<th>'+h+'</th>').join('')}<th>操作</th></tr></thead><tbody>${cells}</tbody></table></div></div>`;
+ $('#main').innerHTML=`<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1><button class="primary right" onclick="growthEditor()">＋ 配置成长权益</button></div>${growthTabs()}<div class="panel" style="overflow:auto"><div id="growthContent"><table><thead><tr><th>守护节点</th>${tinHeaders.map(h=>'<th>'+h+'</th>').join('')}<th>操作</th></tr></thead><tbody>${cells}</tbody></table></div></div>`;
  document.querySelectorAll('[data-growth-id]').forEach(b=>b.onclick=()=>{const id=b.dataset.growthId;const day=id.includes('@')?Number(id.split('@')[1]):(dressGrowth.find(g=>g.id===id)||numericGrowth.find(g=>g.id===id))?.days;nodeGrowthEditor(day||1)});
  document.querySelectorAll('[data-growth-day]').forEach(b=>b.onclick=()=>chooseGrowth(Number(b.dataset.growthDay)));
 }
@@ -489,5 +548,6 @@ materialGroups('T002').push({id:'birthday',name:'生日限定'},{id:'xmas',name:
 for(const [groupId,name] of [['birthday','生日限定边框'],['xmas','圣诞边框']]){
  db.assets.push({id:'DEMO-'+groupId,type:'T002',groupId,name,status:'已上架'});
 }
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{page=b.dataset.page;query='';render()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});render();
+seedDisplayRows();
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{stopSlotPreview();page=b.dataset.page;query='';render()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});render();
 </script></body></html>
