@@ -96,7 +96,7 @@ function displaySourceGroup(s){
  if(s.key.startsWith('dress:'))return '外显装扮';
  if(s.key.startsWith('number:'))return 'DIY 铁盒';
  const t=db.types.find(t=>t.id===s.key.split(':')[1]),category=t&&displayCategory(t);
- return ['box','sticker','text'].includes(category)?'DIY 铁盒':'守护物料制作';
+ return category==='box'?'展示载体':['sticker','text'].includes(category)?'DIY 铁盒':'守护物料制作';
 }
 function displayRulesTable(rows,editable=false,currentDay){
  return '<div style="overflow:auto"><table><thead><tr><th>成长节点</th>'+benefitDisplayGroups.map(g=>'<th>'+esc(g)+'</th>').join('')+(editable?'<th>操作</th>':'')+'</tr></thead><tbody>'+stages.map(n=>'<tr '+(n.days===currentDay?'style="background:#f3f5ff"':'')+'><td>'+esc(n.label)+(n.days===currentDay?' <span class="badge">当前</span>':'')+'</td>'+benefitDisplayGroups.map(g=>'<td>'+ (rows.filter(r=>r.day===n.days&&r.group===g).map(displayBenefitContent).join('')||'—')+'</td>').join('')+(editable?'<td><button class="link" data-display-node="'+n.days+'">配置此节点</button></td>':'')+'</tr>').join('')+'</tbody></table></div>';
