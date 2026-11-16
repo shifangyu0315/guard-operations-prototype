@@ -91,7 +91,7 @@ function displaySources(member,context){
  for(const g of numericGrowth.filter(g=>g.status==='已发布'&&matches(g))){const t=db.types.find(t=>t.id===g.type);if(typeOK(t))add({key:'number:'+t.id+':'+g.days,day:g.days,name:t.name+'（共'+g.value+'个）',group:t.name,source:t.name,icon:'▣',image:''})}
  return [...out.values()].sort((a,b)=>a.day-b.day);
 }
-const benefitDisplayGroups=['外显装扮','守护物料制作','DIY 铁盒'];
+const benefitDisplayGroups=['外显装扮','守护物料制作','DIY 铁盒','展示载体'];
 function displaySourceGroup(s){
  if(s.key.startsWith('dress:'))return '外显装扮';
  if(s.key.startsWith('number:'))return 'DIY 铁盒';
