@@ -154,11 +154,11 @@ let selectedAssetType='', selectedAssetGroup='', selectedDisplayCategory='box';
 const displayCategories={box:'盒型',diy:'自制物料',sticker:'贴纸',text:'文字'};
 function displayCategory(t){if(t.category==='quota')return '';if(t.category==='box')return 'box';if(t.category==='decor')return 'sticker';return t.displayCategory||(t.template==='文字贴纸模板'?'text':'diy')}
 
-// DIY groups belong to each type; fixed categories share optional groups.
+// DIY groups belong to each type; fixed categories share groups; every scope has at least one group.
 const groupCatalog=new Map();
 function groupScope(typeId){const c=displayCategory(type(typeId));return c==='diy'?typeId:c}
-function materialGroups(typeId){const key=groupScope(typeId);if(!groupCatalog.has(key))groupCatalog.set(key,[]);return groupCatalog.get(key)}
-function assignedGroup(asset){return materialGroups(asset.type).find(g=>g.id===asset.groupId)||{id:'',name:'未分类'}}
+function materialGroups(typeId){const key=groupScope(typeId);if(!groupCatalog.has(key))groupCatalog.set(key,[{id:'default',name:'默认分类'}]);return groupCatalog.get(key)}
+function assignedGroup(asset){return materialGroups(asset.type).find(g=>g.id===asset.groupId)||materialGroups(asset.type)[0]}
 function inAssetScope(a,typeId=selectedAssetType){return groupScope(a.type)===groupScope(typeId)}
 function assetScopeName(typeId=selectedAssetType){return displayCategory(type(typeId))==='diy'?type(typeId).name:displayCategories[displayCategory(type(typeId))]}
 function assetTypeField(r){const t=type(r.type||selectedAssetType);return displayCategory(t)==='diy'?field('物料类型',select('type',db.types.filter(t=>displayCategory(t)==='diy').map(t=>[t.id,t.name]),t.id)):field('素材类别','<select id="type" disabled><option value="'+esc(t.id)+'">'+esc(displayCategories[displayCategory(t)])+'</option></select>','',false)}
@@ -170,29 +170,29 @@ function manageGroups(){
   const count=db.assets.filter(a=>inAssetScope(a,typeId)&&assignedGroup(a).id===g.id).length;
   const line=document.createElement('div');line.className='field';line.style.cssText='display:flex;gap:12px;align-items:center';
   line.innerHTML=`<input data-group="${esc(g.id)}" aria-label="分类名称" value="${esc(g.name)}" placeholder="填写分类名称"><span class="subtle" style="white-space:nowrap">${count} 个素材</span><button type="button" >删除</button>`;
-  line.querySelector('button').onclick=()=>line.remove();$('#groupRows').append(line);return line.querySelector('input');
+  line.querySelector('button').onclick=()=>{if($('#groupRows').children.length<=1){$('#groupErrors').textContent='至少保留一个分类，可直接修改分类名称';return}line.remove()};$('#groupRows').append(line);return line.querySelector('input');
  };
  groups.forEach(append);$('#addGroup').onclick=()=>append({id:'group-'+crypto.randomUUID(),name:''}).focus();
  $('#saveGroups').onclick=()=>{
   const next=[...document.querySelectorAll('#groupRows input')].map(e=>({id:e.dataset.group,name:e.value.trim()})),errors=[];
+  if(!next.length)errors.push('至少保留一个分类');
   if(next.some(g=>!g.name))errors.push('请填写分类名称');
   if(new Set(next.map(g=>g.name)).size!==next.length)errors.push('同一范围下的分类不能重名');
   if(errors.length){$('#groupErrors').textContent=errors.join('；');return}
-  for(const a of db.assets.filter(a=>inAssetScope(a,typeId))){if(!next.some(g=>g.id===a.groupId))a.groupId=''}groupCatalog.set(groupScope(typeId),next);selectedAssetGroup='*';closeModal();render();toast('素材分类已保存');
+  for(const a of db.assets.filter(a=>inAssetScope(a,typeId))){if(!next.some(g=>g.id===a.groupId))a.groupId=next[0].id}groupCatalog.set(groupScope(typeId),next);selectedAssetGroup='*';closeModal();render();toast('素材分类已保存');
  };
 }
 function groupPreview(){
  const assets=db.assets.filter(a=>inAssetScope(a)&&a.status==='已上架');
- const groups=materialGroups(selectedAssetType).filter(g=>assets.some(a=>assignedGroup(a).id===g.id));
+ const groups=materialGroups(selectedAssetType);
  $('#modal').innerHTML='<div class="overlay"><div class="drawer"><div class="drawer-head"><h2>'+esc(assetScopeName())+' · 前端分类预览</h2><button class="right" onclick="closeModal()">关闭</button></div><div class="drawer-body"><div class="tabs" id="previewGroups"></div><div id="previewEffect"></div><div id="previewItems"></div></div></div></div>';
- if(groups.length&&assets.some(a=>!assignedGroup(a).id))groups.unshift({id:'',name:'未分类'});
- function show(id){$('#previewGroups').innerHTML=groups.map(g=>'<button data-preview="'+g.id+'" class="'+(g.id===id?'active':'')+'">'+esc(g.name)+'</button>').join('');
+ function show(id){$('#previewGroups').style.display=groups.length<=1?'none':'';$('#previewGroups').innerHTML=(groups.length>1?groups:[]).map(g=>'<button data-preview="'+g.id+'" class="'+(g.id===id?'active':'')+'">'+esc(g.name)+'</button>').join('');
  $('#previewEffect').innerHTML='';$('#previewItems').innerHTML=assets.filter(a=>!groups.length||assignedGroup(a).id===id).map(a=>'<button type="button" data-view-asset="'+esc(a.id)+'" style="display:inline-grid;gap:6px;padding:12px">'+materialImage(a)+'<b>'+esc(a.name)+'</b></button>').join('')||'<p class="empty">暂无已上架素材</p>';document.querySelectorAll('[data-view-asset]').forEach(button=>button.onclick=()=>{const item=assets.find(a=>a.id===button.dataset.viewAsset);$('#previewEffect').innerHTML=item.image?`<img src="${esc(item.image)}" alt="${esc(item.name)}效果图" style="display:block;max-width:100%;max-height:260px;margin:12px auto">`:'<p class="hint">暂无效果图</p>'});document.querySelectorAll('[data-preview]').forEach(b=>b.onclick=()=>show(b.dataset.preview))}show(groups[0]?.id)
 }
 function bindAssetGroup(r){
  const source=$('#type'),host=document.createElement('div');source.closest('.field').after(host);
- const draw=()=>{const groups=[{id:'',name:'不分类'},...materialGroups(source.value)],selected=r.type===source.value?assignedGroup(r).id:'';
-  host.innerHTML=field('分类标签（选填）',`<input id="groupId" type="hidden" value="${esc(selected)}"><div style="display:flex;gap:12px;flex-wrap:wrap">${groups.map(g=>`<label class="slot-line"><input type="radio" name="assetGroupTag" value="${esc(g.id)}" ${g.id===selected?'checked':''}>${esc(g.name)}</label>`).join('')}</div>`,'',false);
+ const draw=()=>{const groups=materialGroups(source.value),selected=r.type===source.value?assignedGroup(r).id:groups[0].id;
+  host.innerHTML=field('分类标签',`<input id="groupId" type="hidden" value="${esc(selected)}"><div style="display:flex;gap:12px;flex-wrap:wrap">${groups.map(g=>`<label class="slot-line"><input type="radio" name="assetGroupTag" value="${esc(g.id)}" ${g.id===selected?'checked':''}>${esc(g.name)}</label>`).join('')}</div>`,'',false);
   host.querySelectorAll('[name=assetGroupTag]').forEach(e=>e.onchange=()=>{$('#groupId').value=e.value});
  };source.addEventListener('change',draw);draw();
 }
@@ -220,8 +220,8 @@ function materialTypeTabs(){
  if(!current)return '<div class="empty">暂无物料类型</div>';
  selectedAssetType=current.id;selectedDisplayCategory=current.category;
  const groups=materialGroups(selectedAssetType);
- if(!['*','',...groups.map(g=>g.id)].includes(selectedAssetGroup)||!groups.length)selectedAssetGroup='*';
- const groupTabs=(groups.length?[{id:'*',name:'全部'},{id:'',name:'未分类'},...groups]:[]).map(g=>`<button type="button" role="tab" aria-selected="${g.id===selectedAssetGroup}" data-asset-group="${esc(g.id)}" class="${g.id===selectedAssetGroup?'active':''}">${esc(g.name)}</button>`).join('');
+ if(!['*',...groups.map(g=>g.id)].includes(selectedAssetGroup)||!groups.length)selectedAssetGroup='*';if(groups.length===1)selectedAssetGroup=groups[0].id;
+ const groupTabs=(groups.length>1?[{id:'*',name:'全部'},...groups]:groups).map(g=>`<button type="button" role="tab" aria-selected="${g.id===selectedAssetGroup}" data-asset-group="${esc(g.id)}" class="${g.id===selectedAssetGroup?'active':''}">${esc(g.name)}</button>`).join('');
  const tabButton=e=>'<button role="tab" aria-selected="'+(e.id===selectedAssetType)+'" data-asset-type="'+e.id+'" class="'+(e.id===selectedAssetType?'active':'')+'">'+esc(e.name)+'</button>';
  return '<div class="material-type-bar" role="tablist" aria-label="物料类型"><div class="tabs fixed-material-types">'+entries.filter(e=>e.category!=='diy').map(tabButton).join('')+'</div><div class="tabs diy-material-types">'+entries.filter(e=>e.category==='diy').map(tabButton).join('')+'</div><button class="link add-material-type" onclick="openEditor(&quot;types&quot;)">＋ 新增类型</button></div><div class="toolbar">'+(groups.length?'<strong>素材分类</strong><div class="tabs" role="tablist" aria-label="素材分类" style="min-width:0;overflow-x:auto;white-space:nowrap">'+groupTabs+'</div>':'')+'<button class="right" onclick="manageGroups()">管理分类</button><button onclick="groupPreview()">前端预览</button></div>';
 }
