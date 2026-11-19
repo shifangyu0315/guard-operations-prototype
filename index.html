@@ -269,7 +269,7 @@ if(kind==='deliveries')body+=section('04','物料标展示',markFields(r));
 $('#modal').innerHTML=`<div class="overlay"><div class="drawer" role="dialog" aria-modal="true" aria-label="${title}"><div class="drawer-head"><h2>${id?'编辑':'新建'}${title}</h2><button class="link right" id="close">✕</button></div><div class="drawer-body"><div id="errors"></div>${body}</div><div class="drawer-foot"><span class="subtle">仅本地演示，不提交线上</span><button class="right" id="cancel">取消</button><button id="draft">保存草稿</button><button class="primary" id="publish">${kind==='types'||kind==='assets'?'保存并上架':'预览并发布'}</button></div></div></div>`;$('#close').onclick=$('#cancel').onclick=closeModal;$('#draft').onclick=()=>save(true);$('#publish').onclick=()=>save(false);if($('#gate')){const update=()=>{if(kind==='types'){const scope=$('#template').value==='外显装扮'?'common':'diy';for(const opt of $('#rule').options)opt.disabled=!!opt.value&&rule(opt.value).scope!==scope;if($('#rule').value&&rule($('#rule').value).scope!==scope)$('#rule').value=''}let g=kind==='types'?rule($('#rule').value):typeGate(type($('#type').value));$('#gate').innerHTML=!g.id?'请选择并核实该类型对应的成长节点；未关联前不可上架或发布投放。':`🔒 继承门槛：<b>${g.member}</b> 且 <b>守护 ≥ ${g.days} 天</b><br><span class="hint">继承既有规则 · 不支持在素材或投放配置中降低门槛</span>`};($('#rule')||$('#type')).onchange=()=>{update();if(kind==='deliveries'||kind==='resources')assetChoices(r)};if(kind==='types')$('#template').onchange=update;update()}
 if($('#aud')){bindAudienceScope()}
 if(kind==='deliveries'){$('#mode').onchange=()=>assetChoices(r);assetChoices(r)}if(kind==='resources'){$('#title').oninput=livePreview;livePreview()}
-if($('#file')){$('#file').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>5*1024*1024){toast('演示限制：请上传 5 MB 以内图片');e.target.value='';return}if(!f.type.startsWith('image/')){toast('请上传图片文件');return}const fr=new FileReader();fr.onload=()=>{upload=fr.result;uploadName=f.name;livePreview()};fr.readAsDataURL(f)}}if(kind==='assets'){bindAssetGroup(r);bindAssetImages(r);bindTextStyle(r)};if(kind==='types')bindTypeFields(r);if(kind==='assets')bindBoxHint();if(kind==='deliveries'){bindMark();addSourceSelector('delivery',id)}$('#name').focus()}
+if($('#file')){$('#file').onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>5*1024*1024){toast('演示限制：请上传 5 MB 以内图片');e.target.value='';return}if(!f.type.startsWith('image/')){toast('请上传图片文件');return}const fr=new FileReader();fr.onload=()=>{upload=fr.result;uploadName=f.name;livePreview()};fr.readAsDataURL(f)}}if(kind==='assets'){bindAssetGroup(r);bindAssetImages(r);bindTextStyle(r)};if(kind==='types')bindTypeFields(r);if(kind==='assets')bindBoxHint();if(kind==='deliveries'){bindMark();addSourceSelector('delivery',id)}if(!$('#name').disabled)$('#name').focus()}
 function assetImageRoles(typeId=$('#type')?.value){
  const category=displayCategory(type(typeId));
  if(category==='diy'||category==='text')return [
@@ -489,11 +489,13 @@ const categories = {
 };
 function typeFields(r){
  const category=r.category||'item';
- return section('01','类型信息',(category==='quota'?'':field('大分类',select('mainCategory',[['box','盒型'],['diy','自制物料'],['sticker','贴纸'],['text','文字']],displayCategory(r)||'diy')))+'<input type="hidden" id="category" value="'+esc(['box','quota'].includes(category)?'body':category)+'">'+ '<div id="typeNameField">'+field('类型名称',input('name',r.name,'例如：小卡、自定义图片贴纸、装饰贴纸'))+'</div>'+field('身份门槛',select('memberThreshold',['VIP','SVIP'],r.memberThreshold||'SVIP'))+'<div id="typeDetails"></div><div id="typeExample" class="field"><label for="exampleFile">类型示范图（选填）</label><input id="exampleFile" type="file" accept="image/png,image/jpeg,image/webp"><p class="hint">上传一张成品示例，支持 PNG、JPG、WebP，最大 5 MB。</p><div id="examplePreview"></div></div>')+
+ return section('01','类型信息',(category==='quota'?'':field('大分类',select('mainCategory',[['box','盒型'],['diy','自制物料'],['sticker','贴纸'],['text','文字']],displayCategory(r)||'diy')))+'<input type="hidden" id="category" value="'+esc(['box','quota'].includes(category)?'body':category)+'">'+ '<div id="typeNameField">'+field('类型名称',input('name',r.name,'例如：小卡、包挂、拍立得'))+'</div>'+field('身份门槛',select('memberThreshold',['VIP','SVIP'],r.memberThreshold||'SVIP'))+'<div id="typeDetails"></div><div id="typeExample" class="field"><label for="exampleFile">类型示范图（选填）</label><input id="exampleFile" type="file" accept="image/png,image/jpeg,image/webp"><p class="hint">上传一张成品示例，支持 PNG、JPG、WebP，最大 5 MB。</p><div id="examplePreview"></div></div>')+
  '<p class="hint">外显装扮直接引用装扮 ID。铁盒外形、铁盒名额为固定类型，进入已有配置维护。</p>'
 }
 function bindTypeFields(r){
  const cat=$('#category'),mainCategory=$('#mainCategory');if(mainCategory)mainCategory.disabled=!!r.id;
+ let diyName=displayCategory(r)==='diy'?(r.name||''):'',previousCategory=mainCategory?.value;
+ $('#name').addEventListener('input',()=>{if(mainCategory?.value==='diy')diyName=$('#name').value});
  const file=$('#exampleFile'),preview=$('#examplePreview');
  function showExample(src){
   preview.dataset.image=src;
@@ -514,7 +516,11 @@ function bindTypeFields(r){
   const selected=mainCategory?.value||'',k=r.category==='quota'?'quota':({box:'box',diy:'item',sticker:'decor',text:'item'})[selected];
   cat.value=k;
   $('#typeExample').hidden=k==='quota';
-  $('#name').disabled=!!r.id&&['box','quota'].includes(k);
+  const editableName=selected==='diy'&&k!=='quota';
+  $('#typeNameField').hidden=!editableName;$('#name').disabled=!editableName;
+  if(editableName){if(previousCategory!=='diy')$('#name').value=diyName}
+  else $('#name').value=r.id?r.name:({box:'盒型',sticker:'贴纸',text:'文字'}[selected]||'铁盒名额');
+  previousCategory=selected;
   if(k==='quota'){$('#typeDetails').innerHTML='';return}
   const base={box:['铁盒外观'],diy:['制作模板','相片边框','平面卡片'],sticker:['装饰素材','平面贴纸'],text:['文字贴纸模板']}[selected];
   const options=[...new Set([...(selected===displayCategory(r)&&r.template?[r.template]:[]),...base])];
