@@ -2671,9 +2671,8 @@ function deliveryTypeTabs(r){
  const entries=[];for(const category of ['box','sticker','text','diy']){const types=db.types.filter(t=>isDeliveryType(t)&&displayCategory(t)===category);if(category==='diy')entries.push(...types.map(t=>({id:t.id,name:t.name,category})));else if(types.length)entries.push({id:types[0].id,name:displayCategories[category],category})}
  const current=entries.find(e=>deliveryTypeMatches($('#type').value,e.id))||entries[0];if(!current)return;
  $('#type').value=current.id;
- const button=e=>`<button type="button" role="tab" aria-selected="${e.id===current.id}" data-delivery-type="${esc(e.id)}" class="${e.id===current.id?'active':''}">${esc(e.name)}</button>`;
- $('#deliveryTypeTabs').innerHTML='<label style="font-weight:600">权益类型 *</label><div class="material-type-bar" style="margin:12px 0 20px" role="tablist" aria-label="投放权益类型"><div class="tabs fixed-material-types">'+entries.filter(e=>e.category!=='diy').map(button).join('')+'</div><div class="tabs diy-material-types">'+entries.filter(e=>e.category==='diy').map(button).join('')+'</div></div>';
- document.querySelectorAll('[data-delivery-type]').forEach(b=>b.onclick=()=>{$('#type').value=b.dataset.deliveryType;deliveryTypeTabs({})});assetChoices(r);
+ $('#deliveryTypeTabs').innerHTML=field('权益类型',`<select id="deliveryTypeSelect" aria-label="权益类型">${entries.map(e=>`<option value="${esc(e.id)}" ${e.id===current.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select>`);
+ $('#deliveryTypeSelect').onchange=()=>{$('#type').value=$('#deliveryTypeSelect').value;assetChoices({})};assetChoices(r);
 }
 function assetChoices(r){
  const groups=materialGroups($('#type').value),current=groups[0]?.id;
