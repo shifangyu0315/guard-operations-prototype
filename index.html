@@ -2853,7 +2853,7 @@ const categories = {
 };
 function typeFields(r){
  const category=r.category||'item';
- return section('01','类型信息',('<input type="hidden" id="mainCategory" value="'+esc(displayCategory(r)||'diy')+'">')+'<input type="hidden" id="category" value="'+esc(['box','quota'].includes(category)?'body':category)+'">'+ '<div id="typeNameField">'+field('类型名称',input('name',r.name,'例如：小卡、包挂、拍立得'))+'</div>'+field('身份门槛',select('memberThreshold',['VIP','SVIP'],r.memberThreshold||'SVIP'))+'<div id="typeDetails"></div><div id="typeExample" class="field"><label for="exampleFile">类型示范图（选填）</label><input id="exampleFile" type="file" accept="image/png,image/jpeg,image/webp"><p class="hint">上传一张成品示例，支持 PNG、JPG、WebP，最大 5 MB。</p><div id="examplePreview"></div></div>')+
+ return section('01','类型信息',('<input type="hidden" id="mainCategory" value="'+esc(displayCategory(r)||'diy')+'">')+'<input type="hidden" id="category" value="'+esc(['box','quota'].includes(category)?'body':category)+'">'+ '<div id="typeNameField">'+field('类型名称',input('name',r.name,'例如：小卡、包挂、拍立得'))+'</div>'+field('身份门槛',select('memberThreshold',['VIP','SVIP'],r.memberThreshold||'SVIP'))+'<div id="typeDetails"></div><div id="typeExample" class="field"><label for="exampleFile">类型示范图（选填）</label><input id="exampleFile" type="file" accept="image/png,image/jpeg,image/webp"><p class="hint">上传一张成品示例，支持 PNG、JPG、WebP，最大 5 MB。展示区比例 1:1，UI 尺寸 100 × 100 px。</p><div id="examplePreview"></div></div>')+
  '<p class="hint">在这里新增小卡、拍立得、包挂等自制物料类型；盒型、贴纸和文字的素材在「守护物料与装饰品素材管理」中维护。</p>'
 }
 function bindTypeFields(r){
