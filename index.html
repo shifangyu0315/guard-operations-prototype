@@ -2373,12 +2373,17 @@ function resourceSimulator(previewDraft=false){
  $('#again').onclick=()=>{draw();if(slotPreviewTimer!==null)start()};$('#restartSlot').onclick=reset;$('#pauseSlot').onclick=()=>{if(slotPreviewTimer!==null){stopSlotPreview();$('#pauseSlot').textContent='继续轮播'}else{start();$('#pauseSlot').textContent='暂停轮播'}};$('.drawer-body').oninput=reset;draw();start();
 }
 let growthTab='association',displayMember='VIP',displayDay='all',displayRows=[],slotPreviewTimer=null;
-let publishedDisplayConfig=null,displayPublishedAt='';
+let publishedDisplayConfig=null,displayPublishedAt={VIP:'',SVIP:''};
 function displayDraftSnapshot(){return {categories:structuredClone(growthDisplayCategories),rows:structuredClone(displayRows)}}
-function displayHasChanges(){return JSON.stringify(displayDraftSnapshot())!==JSON.stringify(publishedDisplayConfig)}
+function displayMemberSnapshot(config,member){return {categories:config?.categories[member]||[],rows:(config?.rows||[]).filter(r=>r.member===member)}}
+function displayHasChanges(member=displayMember){return JSON.stringify(displayMemberSnapshot(displayDraftSnapshot(),member))!==JSON.stringify(displayMemberSnapshot(publishedDisplayConfig,member))}
 function publishDisplayConfiguration(){
  if(!displayHasChanges()){toast('当前没有未发布修改');return}
- publishedDisplayConfig=displayDraftSnapshot();displayPublishedAt=new Date().toLocaleString('zh-CN',{hour12:false});renderDisplayConfiguration();toast('VIP / SVIP 全部展示配置已发布（本地演示）');
+ const member=displayMember,draft=displayDraftSnapshot();
+ publishedDisplayConfig??={categories:{},rows:[]};
+ publishedDisplayConfig.categories[member]=draft.categories[member];
+ publishedDisplayConfig.rows=publishedDisplayConfig.rows.filter(r=>r.member!==member).concat(draft.rows.filter(r=>r.member===member));
+ displayPublishedAt[member]=new Date().toLocaleString('zh-CN',{hour12:false});renderDisplayConfiguration();toast(member+' 展示配置已发布（本地演示）');
 }
 function growthTabs(){return '<div class="tabs" style="margin-bottom:20px"><button class="'+(growthTab==='association'?'active':'')+'" onclick="growthTab=\'association\';renderGrowth()">关联配置</button><button class="'+(growthTab==='display'?'active':'')+'" onclick="growthTab=\'display\';renderGrowth()">C 端展示配置</button></div>'}
 // Sources identify the node and benefit type, not the mutable record IDs.
@@ -2420,7 +2425,7 @@ function configuredDisplayBenefits(c){const config=c.previewDraft?displayDraftSn
 function displayBenefitContent(r){return '<div style="margin-bottom:8px;overflow-wrap:anywhere"><strong>'+esc(r.name)+'</strong></div>'}
 function renderDisplayConfiguration(){
  const rows=orderedDisplayRows(displayMember).filter(r=>r.enabled);
- $('#main').innerHTML='<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1><button class="right" onclick="displayFloatPreview()">浮层预览</button><button class="primary" onclick="publishDisplayConfiguration()" '+(displayHasChanges()?'':'disabled')+'>发布全部配置</button></div>'+growthTabs()+'<p role="status"><span class="badge">'+(displayHasChanges()?'有未发布修改':'已发布')+'</span> '+(displayPublishedAt?'最近发布：'+esc(displayPublishedAt):'')+'</p>'+'<p class="hint" style="margin-bottom:16px">分类和节点保存为草稿，预览查看草稿效果；发布全部配置后，VIP / SVIP 的浮层与引导条统一生效。</p><div class="panel"><div class="tabs">'+['VIP','SVIP'].map(m=>'<button class="'+(m===displayMember?'active':'')+'" data-display-member="'+m+'">'+m+'</button>').join('')+'</div><div style="padding:20px"><div class="heading"><h2>01 展示分类</h2><button class="right" onclick="displayCategoryEditor()">管理展示分类</button></div><p>'+memberDisplayGroups().map(g=>esc(g.name)).join('　 /　 ')+'</p><p class="hint">分类名称作为浮层表头；VIP 与 SVIP 分别配置。</p><h2 style="margin-top:24px">02 节点权益</h2></div>'+displayRulesTable(rows,true)+'</div>';
+ $('#main').innerHTML='<div class="crumb">艺粉商业化 / 成长权益配置</div><div class="heading"><h1>成长权益配置</h1><button class="right" onclick="displayFloatPreview()">浮层预览</button></div>'+growthTabs()+'<p class="hint" style="margin-bottom:16px">分类和节点保存为草稿，预览查看草稿效果；VIP 与 SVIP 分别发布，互不影响。</p><div class="panel"><div class="tabs">'+['VIP','SVIP'].map(m=>'<button class="'+(m===displayMember?'active':'')+'" data-display-member="'+m+'">'+m+'</button>').join('')+'</div><div style="padding:20px"><div class="heading"><h2>01 展示分类</h2><button class="right" onclick="displayCategoryEditor()">管理展示分类</button></div><p>'+memberDisplayGroups().map(g=>esc(g.name)).join('　 /　 ')+'</p><p class="hint">分类名称作为浮层表头；VIP 与 SVIP 分别配置。</p><div class="heading" style="margin-top:24px;margin-bottom:12px"><h2>02 节点权益</h2><button class="primary right" onclick="publishDisplayConfiguration()" '+(displayHasChanges()?'':'disabled')+'>保存并发布 '+displayMember+'</button></div><p role="status"><span class="badge">'+(displayHasChanges()?'有未发布修改':'已发布')+'</span> '+(displayPublishedAt[displayMember]?'最近发布：'+esc(displayPublishedAt[displayMember]):'')+'</p><p class="hint">仅发布 '+displayMember+' 的全部展示分类及节点权益，浮层与引导条同步生效。</p></div>'+displayRulesTable(rows,true)+'</div>';
  document.querySelectorAll('[data-display-member]').forEach(b=>b.onclick=()=>{displayMember=b.dataset.displayMember;renderDisplayConfiguration()});
  document.querySelectorAll('[data-display-node]').forEach(b=>b.onclick=()=>displayBenefitEditor(Number(b.dataset.displayNode)));
 }
@@ -2434,7 +2439,7 @@ function displayCategoryEditor(){
  document.querySelectorAll('[data-category-remove]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.categoryRemove);if(displayRows.some(r=>r.member===member&&r.group===draft[i].id)){$('#categoryErrors').innerHTML='<div class="error">该分类下已有节点权益，请先移除对应权益后再删除分类。</div>';return}draft.splice(i,1);draw()});
  };draw();
  $('#addDisplayCategory').onclick=()=>{draft.push({id:'group-'+crypto.randomUUID(),name:''});draw()};
- $('#saveDisplayCategories').onclick=()=>{const names=draft.map(g=>g.name.trim());if(!names.length||names.some(n=>!n)||new Set(names).size!==names.length){$('#categoryErrors').innerHTML='<div class="error">请保留至少一个分类，名称不能为空或重复。</div>';return}growthDisplayCategories[member]=draft.map(g=>({...g,name:g.name.trim()}));closeModal();renderDisplayConfiguration();toast('分类草稿已保存，待统一发布')};
+ $('#saveDisplayCategories').onclick=()=>{const names=draft.map(g=>g.name.trim());if(!names.length||names.some(n=>!n)||new Set(names).size!==names.length){$('#categoryErrors').innerHTML='<div class="error">请保留至少一个分类，名称不能为空或重复。</div>';return}growthDisplayCategories[member]=draft.map(g=>({...g,name:g.name.trim()}));closeModal();renderDisplayConfiguration();toast('分类草稿已保存，待当前会员发布')};
 }
 function displayBenefitEditor(day){
  const member=displayMember;let draft=orderedDisplayRows(member).filter(r=>r.day===day).map(r=>({...r}));
@@ -2450,7 +2455,7 @@ function displayBenefitEditor(day){
   const filled=draft.filter(r=>r.name.trim());
   const remaining=displayRows.filter(r=>r.member!==member||r.day!==day);const existingOrders=displayRows.filter(r=>r.member===member&&r.day===day).map(r=>r.order);const nextOrder=existingOrders.length?Math.min(...existingOrders):Math.max(0,...displayRows.map(r=>r.order||0))+10;
   displayRows=[...remaining,...filled.map((r,i)=>({...r,name:r.name.trim(),order:nextOrder+i/(filled.length+1)}))];
-  closeModal();renderDisplayConfiguration();toast('节点草稿已保存，待统一发布');
+  closeModal();renderDisplayConfiguration();toast('节点草稿已保存，待当前会员发布');
  };
 }
 async function displayFloatPreview(){
